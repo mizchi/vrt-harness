@@ -460,6 +460,30 @@ after.html を見せず、before.html (Tailwind) + VRT diff だけで vanilla CS
 共通領域のみ pixelmatch で比較し、余剰領域は追加 diff として計上する方式に修正。
 これにより高さが数 px 異なるだけで全面 diff になることを防いだ。
 
+## pixelmatch 実装比較
+
+同一画像 (identical) での比較。500x500 = 250,000 pixels。
+
+| 実装 | 500x500 | 1280x900 | 1920x1080 |
+|------|---------|----------|-----------|
+| **npm pixelmatch v7** (JS) | **0.56ms** | **2.52ms** | **4.50ms** |
+| mizchi/pixelmatch (MoonBit JS) | 1.94ms | ~9ms (est.) | ~16ms (est.) |
+| mizchi/pixelmatch (MoonBit WASM-GC) | 1.11ms | ~5ms (est.) | ~9ms (est.) |
+
+npm pixelmatch v7 が最速 (C で書かれた algorithm の JS 実装)。
+MoonBit WASM-GC は JS 版より ~1.7x 速いが、npm v7 には及ばない。
+
+**ボトルネックは pixelmatch ではなく PNG encode** (153ms/回)。crater の `capturePaintData` (生 RGBA) を使えば PNG encode/decode をスキップできる。
+
+| 操作 | 時間 | 備考 |
+|------|------|------|
+| pixelmatch 1280x900 | 2.5ms | 高速。ボトルネックではない |
+| PNG encode 1280x900 | 153ms | **最大のボトルネック** |
+| PNG decode 1280x900 | 73ms | 2番目 |
+| paint tree diff (125 nodes) | 0.07ms | crater 固有。極めて高速 |
+
+**最適化の方向**: PNG を介さず生 RGBA で比較する。crater prescanner では既にこれが可能。
+
 ## 知見のまとめ
 
 ### 効果が高かった手法 (実装済み)
