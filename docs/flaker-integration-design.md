@@ -26,6 +26,7 @@
 - 最初から `flaker` 本体に組み込み runner を追加すること
 
 初期実装では `vrt-harness` 側に custom runner を置き、`flaker` から外部コマンドとして呼ぶ。
+2026-04-02 時点ではこの custom runner に加えて、`metric-ci` 側の built-in `vrt-migration` / `vrt-bench` adapter と、artifact 収集用 workflow まで実装済み。
 
 ## 責務境界
 
@@ -270,8 +271,8 @@ artifact_name = "migration-report"
 
 [runner]
 type = "custom"
-list = "node --experimental-strip-types ./src/flaker-vrt-runner.ts list"
-execute = "node --experimental-strip-types ./src/flaker-vrt-runner.ts execute"
+list = "node --experimental-strip-types ./src/flaker-vrt-runner.ts list --config ./examples/flaker.vrt.json"
+execute = "node --experimental-strip-types ./src/flaker-vrt-runner.ts execute --config ./examples/flaker.vrt.json"
 
 [affected]
 resolver = "simple"
@@ -306,8 +307,9 @@ min_runs = 5
 
 - `examples/flaker.toml`
 - `examples/flaker.vrt.json`
-- `just flaker-vrt-list`
-- `just flaker-vrt-run`
+- `node --experimental-strip-types ./src/flaker-vrt-runner.ts list --config ./examples/flaker.vrt.json`
+- `node --experimental-strip-types ./src/flaker-vrt-runner.ts execute --config ./examples/flaker.vrt.json`
+- `just flaker-vrt-adapt`
 
 完了条件:
 

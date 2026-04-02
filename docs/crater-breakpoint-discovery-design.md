@@ -1,8 +1,12 @@
 # crater breakpoint discovery 設計
 
+2026-04-02 時点では crater core / BiDi / `vrt-harness` 連携は実装済みで、未完は external stylesheet discovery などの v2 領域。
+
 ## 背景
 
-`vrt-harness` はすでに breakpoint を quickcheck の境界値として扱う発想を持っているが、現在の抽出は regex ベースで、`<style>` しか見ていない。
+当初の `vrt-harness` は breakpoint を quickcheck の境界値として扱う発想は持っていたが、抽出は regex ベースで、`<style>` しか見ていなかった。
+
+現在は `migration-compare --discover-backend auto|regex|crater` が入り、既定の `auto` は crater の `getResponsiveBreakpoints` を優先し、使えない場合だけ regex discovery にフォールバックする。
 
 一方 `crater` は以下をすでに持っている。
 
