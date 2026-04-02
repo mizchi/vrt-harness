@@ -43,6 +43,7 @@ import { appendRecords, type DetectionRecord } from "./detection-db.ts";
 import { createLLMProvider } from "./llm-client.ts";
 import { appendBenchHistory, buildBenchHistoryRecord } from "./bench-history.ts";
 import {
+  CSS_BENCH_OUTPUT_ROOT,
   getCssBenchApprovalSuggestionsPath,
   getCssBenchFixtureOutputDir,
   getCssChallengeFixturePath,
@@ -81,15 +82,58 @@ function getArgValues(name: string): string[] {
 }
 function hasFlag(name: string): boolean { return args.includes(`--${name}`); }
 
-const TRIALS = parseInt(getArg("trials", "20"), 10);
-const START_SEED = parseInt(getArg("start-seed", "1"), 10);
-const SAVE_DB = !hasFlag("no-db");
-const FIXTURE_ARGS = getArgValues("fixture");
 type BenchBackend = RenderBackend | "prescanner";
-const BACKEND = getArg("backend", "chromium") as BenchBackend;
-const APPROVAL_PATH = getArg("approval", "");
-const STRICT = hasFlag("strict");
-const SUGGEST_APPROVAL = hasFlag("suggest-approval");
+export interface CssChallengeBenchCliOptions {
+  trials: number;
+  startSeed: number;
+  saveDb: boolean;
+  fixtureArgs: string[];
+  backend: BenchBackend;
+  approvalPath: string;
+  strict: boolean;
+  suggestApproval: boolean;
+  outputRoot: string;
+}
+
+export function parseCssChallengeBenchArgs(cliArgs: string[]): CssChallengeBenchCliOptions {
+  function getCliArg(name: string, fallback: string): string {
+    const idx = cliArgs.indexOf(`--${name}`);
+    return idx >= 0 && cliArgs[idx + 1] ? cliArgs[idx + 1] : fallback;
+  }
+  function getCliArgValues(name: string): string[] {
+    const values: string[] = [];
+    for (let i = 0; i < cliArgs.length; i++) {
+      if (cliArgs[i] === `--${name}` && cliArgs[i + 1]) values.push(cliArgs[i + 1]);
+    }
+    return values;
+  }
+  function hasCliFlag(name: string): boolean {
+    return cliArgs.includes(`--${name}`);
+  }
+
+  return {
+    trials: parseInt(getCliArg("trials", "20"), 10),
+    startSeed: parseInt(getCliArg("start-seed", "1"), 10),
+    saveDb: !hasCliFlag("no-db"),
+    fixtureArgs: getCliArgValues("fixture"),
+    backend: getCliArg("backend", "chromium") as BenchBackend,
+    approvalPath: getCliArg("approval", ""),
+    strict: hasCliFlag("strict"),
+    suggestApproval: hasCliFlag("suggest-approval"),
+    outputRoot: getCliArg("output-root", CSS_BENCH_OUTPUT_ROOT),
+  };
+}
+
+const CLI_OPTIONS = parseCssChallengeBenchArgs(args);
+const TRIALS = CLI_OPTIONS.trials;
+const START_SEED = CLI_OPTIONS.startSeed;
+const SAVE_DB = CLI_OPTIONS.saveDb;
+const FIXTURE_ARGS = CLI_OPTIONS.fixtureArgs;
+const BACKEND = CLI_OPTIONS.backend;
+const APPROVAL_PATH = CLI_OPTIONS.approvalPath;
+const STRICT = CLI_OPTIONS.strict;
+const SUGGEST_APPROVAL = CLI_OPTIONS.suggestApproval;
+const OUTPUT_ROOT = CLI_OPTIONS.outputRoot;
 
 const VIEWPORTS = [
   { width: 1440, height: 900, label: "wide" },
@@ -247,7 +291,7 @@ async function analyzeAcrossViewports(
 
 async function runFixtureBenchmark(fixture: string) {
   const fixturePath = getCssChallengeFixturePath(fixture);
-  const tmpDir = getCssBenchFixtureOutputDir(fixture);
+  const tmpDir = getCssBenchFixtureOutputDir(fixture, OUTPUT_ROOT);
   await mkdir(tmpDir, { recursive: true });
 
   const htmlRaw = await readFile(fixturePath, "utf-8");
@@ -705,7 +749,7 @@ async function runFixtureBenchmark(fixture: string) {
   }
 
   if (SUGGEST_APPROVAL) {
-    const suggestionPath = getCssBenchApprovalSuggestionsPath(fixture);
+    const suggestionPath = getCssBenchApprovalSuggestionsPath(fixture, OUTPUT_ROOT);
     await writeFile(suggestionPath, JSON.stringify({ rules: approvalSuggestions }, null, 2));
     console.log(`  ${DIM}Approval suggestions: ${suggestionPath}${RESET}`);
   }
@@ -770,4 +814,6 @@ function fmtRateCompact(count: number, total: number, inverse = false): string {
   return `${color}${pct}%${RESET}`;
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+if (import.meta.main) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}

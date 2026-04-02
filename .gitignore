@@ -5,3 +5,4 @@ snapshots/
 output/
 vrt-report.json
 playwright-report/
+data/*.jsonl
