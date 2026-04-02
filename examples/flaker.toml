@@ -1,0 +1,28 @@
+[repo]
+owner = "mizchi"
+name = "vrt-harness"
+
+[storage]
+path = ".flaker/data.duckdb"
+
+[adapter]
+type = "vrt-migration"
+artifact_name = "migration-report"
+
+[runner]
+type = "custom"
+list = "node --experimental-strip-types ./src/flaker-vrt-runner.ts list --config ./examples/flaker.vrt.json"
+execute = "node --experimental-strip-types ./src/flaker-vrt-runner.ts execute --config ./examples/flaker.vrt.json"
+
+[affected]
+resolver = "simple"
+config = ""
+
+[quarantine]
+auto = true
+flaky_rate_threshold = 30.0
+min_runs = 5
+
+[flaky]
+window_days = 14
+detection_threshold = 0.1

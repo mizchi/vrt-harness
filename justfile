@@ -61,6 +61,10 @@ migration-compare *args:
 migration-fix-loop *args:
   node --experimental-strip-types src/migration-fix-loop.ts {{args}}
 
+# Adapt migration-report.json to flaker TestCaseResult[] JSON
+flaker-vrt-adapt *args:
+  node --experimental-strip-types src/flaker-vrt-report-adapter.ts {{args}}
+
 # Migration: Reset CSS comparison
 migration-reset:
   npx tsx src/migration-compare.ts --dir fixtures/migration/reset-css --baseline normalize.html --variants modern-normalize.html destyle.html no-reset.html

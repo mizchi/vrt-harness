@@ -1,0 +1,40 @@
+{
+  "scenarios": [
+    {
+      "id": "migration/tailwind-to-vanilla",
+      "kind": "migration",
+      "dir": "fixtures/migration/tailwind-to-vanilla",
+      "baseline": "before.html",
+      "variants": ["after.html"],
+      "viewports": [
+        { "label": "wide", "width": 1440, "height": 900 },
+        { "label": "desktop", "width": 1280, "height": 900 },
+        { "label": "mobile", "width": 375, "height": 812 }
+      ]
+    },
+    {
+      "id": "migration/reset-css",
+      "kind": "migration",
+      "dir": "fixtures/migration/reset-css",
+      "baseline": "normalize.html",
+      "variants": ["modern-normalize.html", "destyle.html", "no-reset.html"],
+      "viewports": [
+        { "label": "wide", "width": 1440, "height": 900 },
+        { "label": "desktop", "width": 1280, "height": 900 },
+        { "label": "mobile", "width": 375, "height": 812 }
+      ]
+    },
+    {
+      "id": "migration/shadcn-to-luna",
+      "kind": "migration",
+      "dir": "fixtures/migration/shadcn-to-luna",
+      "baseline": "before.html",
+      "variants": ["after.html"],
+      "viewports": [
+        { "label": "wide", "width": 1440, "height": 900 },
+        { "label": "desktop", "width": 1280, "height": 900 },
+        { "label": "mobile", "width": 375, "height": 812 }
+      ]
+    }
+  ]
+}
