@@ -26,8 +26,6 @@ jobs:
   compare:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      OUTPUT_ROOT: ${{ runner.temp }}/bench-report
     steps:
       - uses: actions/checkout@v4
 
@@ -48,6 +46,7 @@ jobs:
 
       - name: Run CSS bench
         run: |
+          OUTPUT_ROOT="$RUNNER_TEMP/bench-report"
           node --experimental-strip-types src/css-challenge-bench.ts \
             --fixture "${{ inputs.fixture }}" \
             --trials "${{ inputs.trials }}" \

@@ -17,8 +17,6 @@ jobs:
   compare:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      OUTPUT_DIR: ${{ runner.temp }}/migration-report
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +38,7 @@ jobs:
       - name: Run migration compare
         shell: bash
         run: |
+          OUTPUT_DIR="$RUNNER_TEMP/migration-report"
           case "${{ inputs.scenario }}" in
             tailwind-to-vanilla)
               pnpm exec tsx src/migration-compare.ts \
