@@ -19,6 +19,29 @@ import {
 
 export const DEFAULT_BIDI_URL = "ws://127.0.0.1:9222";
 
+export interface CraterResponsiveBreakpoint {
+  axis: "width";
+  op: "ge" | "gt" | "le" | "lt";
+  valuePx: number;
+  raw: string;
+  normalized: string;
+  guards: string[];
+  ruleCount: number;
+}
+
+export interface CraterBreakpointDiscoveryDiagnostics {
+  stylesheetCount: number;
+  ruleCount: number;
+  externalStylesheetLinks: string[];
+  ignoredQueries: string[];
+  unsupportedQueries: string[];
+}
+
+export interface CraterBreakpointDiscoveryResult {
+  breakpoints: CraterResponsiveBreakpoint[];
+  diagnostics?: CraterBreakpointDiscoveryDiagnostics;
+}
+
 interface BidiResponse {
   id: number;
   type: "success" | "error";
@@ -154,6 +177,29 @@ export class CraterClient {
       return new Map();
     }
     return computedStyleSnapshotToMap(snapshot);
+  }
+
+  async getResponsiveBreakpoints(
+    options: {
+      mode?: "live-inline" | "html-inline";
+      axis?: "width";
+      includeDiagnostics?: boolean;
+    } = {},
+  ): Promise<CraterBreakpointDiscoveryResult> {
+    const resp = await this.sendBidi("browsingContext.getResponsiveBreakpoints", {
+      context: this.requireContextId(),
+      mode: options.mode ?? "live-inline",
+      axis: options.axis ?? "width",
+      includeDiagnostics: options.includeDiagnostics ?? true,
+    }, 30_000);
+    if (resp.type === "error") {
+      throw new Error(resp.message || resp.error || "getResponsiveBreakpoints failed");
+    }
+    const result = resp.result as CraterBreakpointDiscoveryResult | undefined;
+    return {
+      breakpoints: result?.breakpoints ?? [],
+      diagnostics: result?.diagnostics,
+    };
   }
 
   // ---- Private ----

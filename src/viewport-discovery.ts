@@ -13,6 +13,16 @@ export interface Breakpoint {
   raw: string;            // e.g. "(min-width: 768px)"
 }
 
+export interface ResponsiveBreakpoint {
+  axis: "width";
+  op: "ge" | "gt" | "le" | "lt";
+  valuePx: number;
+  raw: string;
+  normalized: string;
+  guards: string[];
+  ruleCount: number;
+}
+
 export interface ViewportSpec {
   width: number;
   height: number;
@@ -22,8 +32,11 @@ export interface ViewportSpec {
 
 export interface DiscoveryResult {
   breakpoints: Breakpoint[];
+  responsiveBreakpoints: ResponsiveBreakpoint[];
   viewports: ViewportSpec[];
 }
+
+type ViewportBreakpoint = Breakpoint | ResponsiveBreakpoint;
 
 // ---- Breakpoint extraction ----
 
@@ -62,6 +75,87 @@ export function extractBreakpointsFromHtml(html: string): Breakpoint[] {
   return extractBreakpoints(css);
 }
 
+function isResponsiveBreakpoint(
+  breakpoint: ViewportBreakpoint,
+): breakpoint is ResponsiveBreakpoint {
+  return "axis" in breakpoint;
+}
+
+function normalizeResponsiveBreakpoint(
+  breakpoint: ViewportBreakpoint,
+): ResponsiveBreakpoint {
+  if (isResponsiveBreakpoint(breakpoint)) {
+    const guards = [...new Set(breakpoint.guards)].sort((a, b) => a.localeCompare(b));
+    return {
+      axis: breakpoint.axis,
+      op: breakpoint.op,
+      valuePx: breakpoint.valuePx,
+      raw: breakpoint.raw,
+      normalized: breakpoint.normalized,
+      guards,
+      ruleCount: breakpoint.ruleCount ?? 1,
+    };
+  }
+
+  const op = breakpoint.type === "min-width" ? "ge" : "le";
+  const operator = op === "ge" ? ">=" : "<=";
+  return {
+    axis: "width",
+    op,
+    valuePx: breakpoint.value,
+    raw: breakpoint.raw,
+    normalized: `(width ${operator} ${breakpoint.value}px)`,
+    guards: [],
+    ruleCount: 1,
+  };
+}
+
+function compareResponsiveBreakpoint(
+  left: ResponsiveBreakpoint,
+  right: ResponsiveBreakpoint,
+): number {
+  if (left.valuePx !== right.valuePx) return left.valuePx - right.valuePx;
+  const order = { lt: 0, le: 1, ge: 2, gt: 3 } as const;
+  if (order[left.op] !== order[right.op]) return order[left.op] - order[right.op];
+  return left.guards.join("|").localeCompare(right.guards.join("|"));
+}
+
+export function toResponsiveBreakpoints(
+  breakpoints: ViewportBreakpoint[],
+): ResponsiveBreakpoint[] {
+  const merged = new Map<string, ResponsiveBreakpoint>();
+
+  for (const breakpoint of breakpoints) {
+    const normalized = normalizeResponsiveBreakpoint(breakpoint);
+    const key = [
+      normalized.axis,
+      normalized.op,
+      normalized.valuePx,
+      normalized.guards.join("&"),
+    ].join(":");
+    const existing = merged.get(key);
+    if (existing) {
+      existing.ruleCount += normalized.ruleCount;
+      continue;
+    }
+    merged.set(key, { ...normalized });
+  }
+
+  return [...merged.values()].sort(compareResponsiveBreakpoint);
+}
+
+export function mergeResponsiveBreakpoints(
+  ...collections: ViewportBreakpoint[][]
+): ResponsiveBreakpoint[] {
+  return toResponsiveBreakpoints(collections.flat());
+}
+
+export function extractResponsiveBreakpointsFromHtml(
+  html: string,
+): ResponsiveBreakpoint[] {
+  return toResponsiveBreakpoints(extractBreakpointsFromHtml(html));
+}
+
 // ---- Viewport generation ----
 
 export interface ViewportOptions {
@@ -87,9 +181,10 @@ const STANDARD_VIEWPORTS: Array<{ width: number; label: string }> = [
  * - (オプション) 範囲内のランダムサンプル
  */
 export function generateViewports(
-  breakpoints: Breakpoint[],
+  breakpoints: ViewportBreakpoint[],
   options: ViewportOptions = {},
 ): ViewportSpec[] {
+  const responsiveBreakpoints = toResponsiveBreakpoints(breakpoints);
   const height = options.height ?? 900;
   const maxViewports = options.maxViewports ?? 20;
   const randomSamples = options.randomSamples ?? 0;
@@ -113,21 +208,25 @@ export function generateViewports(
   }
 
   // Boundary viewports for each breakpoint
-  for (const bp of breakpoints) {
-    if (bp.type === "min-width") {
-      // min-width: N → test at N-1 (below) and N (at)
-      add(bp.value - 1, `below-${bp.value}`, `${bp.raw} boundary-below`);
-      add(bp.value, `at-${bp.value}`, `${bp.raw} boundary-at`);
+  for (const bp of responsiveBreakpoints) {
+    if (bp.op === "ge") {
+      add(bp.valuePx - 1, `below-${bp.valuePx}`, `${bp.raw} boundary-below`);
+      add(bp.valuePx, `at-${bp.valuePx}`, `${bp.raw} boundary-at`);
+    } else if (bp.op === "gt") {
+      add(bp.valuePx, `at-${bp.valuePx}`, `${bp.raw} boundary-at`);
+      add(bp.valuePx + 1, `above-${bp.valuePx}`, `${bp.raw} boundary-above`);
+    } else if (bp.op === "le") {
+      add(bp.valuePx, `at-${bp.valuePx}`, `${bp.raw} boundary-at`);
+      add(bp.valuePx + 1, `above-${bp.valuePx}`, `${bp.raw} boundary-above`);
     } else {
-      // max-width: N → test at N (at) and N+1 (above)
-      add(bp.value, `at-${bp.value}`, `${bp.raw} boundary-at`);
-      add(bp.value + 1, `above-${bp.value}`, `${bp.raw} boundary-above`);
+      add(bp.valuePx - 1, `below-${bp.valuePx}`, `${bp.raw} boundary-below`);
+      add(bp.valuePx, `at-${bp.valuePx}`, `${bp.raw} boundary-at`);
     }
   }
 
   // Random samples within breakpoint ranges
-  if (randomSamples > 0 && breakpoints.length > 0) {
-    const allWidths = [...new Set(breakpoints.map((b) => b.value))].sort((a, b) => a - b);
+  if (randomSamples > 0 && responsiveBreakpoints.length > 0) {
+    const allWidths = [...new Set(responsiveBreakpoints.map((b) => b.valuePx))].sort((a, b) => a - b);
     const ranges: Array<[number, number]> = [];
 
     // Build ranges: [320, bp1], [bp1, bp2], ..., [bpN, 1920]
@@ -162,6 +261,7 @@ export function discoverViewports(
   options: ViewportOptions = {},
 ): DiscoveryResult {
   const breakpoints = extractBreakpointsFromHtml(html);
-  const viewports = generateViewports(breakpoints, options);
-  return { breakpoints, viewports };
+  const responsiveBreakpoints = toResponsiveBreakpoints(breakpoints);
+  const viewports = generateViewports(responsiveBreakpoints, options);
+  return { breakpoints, responsiveBreakpoints, viewports };
 }

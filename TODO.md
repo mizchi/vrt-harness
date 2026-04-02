@@ -117,6 +117,19 @@ GET /api/status
 - [ ] KV に approval manifest を保存
 - [ ] D1 に実行履歴を保存 (将来)
 
+#### 2.4 flaker / CI integration
+
+> 設計: [docs/flaker-integration-design.md](/Users/mz/ghq/github.com/mizchi/vrt-harness/docs/flaker-integration-design.md)
+
+- [x] `flaker.vrt.json` の型定義と loader
+- [x] `src/flaker-vrt-runner.ts` custom runner (`migration-compare` -> `TestCaseResult[]`)
+- [x] `examples/flaker.toml` / `examples/flaker.vrt.json`
+- [x] `migration-report.json` import adapter
+- [x] `metric-ci` built-in `vrt-migration` adapter (`flaker import --adapter vrt-migration`)
+- [x] `migration-report` artifact workflow (`.github/workflows/migration-report.yml`)
+- [x] `metric-ci` built-in `vrt-bench` adapter (`flaker import --adapter vrt-bench`)
+- [x] `bench-report` artifact workflow (`.github/workflows/bench-report.yml`)
+
 ### 3. Renderer Comparison Mode — レンダラー間差分
 
 Website v1 vs v2 やレンダラー比較の汎用フレームワーク。
@@ -126,6 +139,19 @@ Website v1 vs v2 やレンダラー比較の汎用フレームワーク。
 - [ ] ページ単位ではなくコンポーネント (セレクタ) 単位の比較
 - [ ] 差分の分類: layout shift / color change / text change / element added/removed
 - [ ] Approval manifest で既知の差分をフィルタ
+
+#### 3.1 Responsive breakpoint discovery via crater
+
+> 設計: [docs/crater-breakpoint-discovery-design.md](/Users/mz/ghq/github.com/mizchi/vrt-harness/docs/crater-breakpoint-discovery-design.md)
+
+- [x] crater core に parser ベースの `discover_responsive_breakpoints(html, external_css?)`
+- [x] crater BiDi に `browsingContext.getResponsiveBreakpoints`
+- [x] v1 は width-only / screen-only / inline-live styles に限定
+- [x] `vrt-harness` 側の `viewport-discovery.ts` を extract / generate に分離
+- [x] `migration-compare --discover-backend crater|regex|auto`
+- [x] baseline / variant の breakpoint union
+- [x] discovery diagnostics を report JSON に保存
+- [ ] v2 で external stylesheet を discovery に含める
 
 ### 4. ダッシュボード (別リポジトリ、将来)
 

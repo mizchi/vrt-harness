@@ -24,6 +24,7 @@ import {
   DEFAULT_BIDI_URL,
   diffPaintTrees,
   isCraterAvailable,
+  type CraterBreakpointDiscoveryDiagnostics,
   type PaintNode,
   type PaintTreeChange,
 } from "./crater-client.ts";
@@ -44,7 +45,13 @@ import {
   type MigrationFixCandidateSummary,
 } from "./migration-fix-candidates.ts";
 import { summarizeMigrationReportConvergence, type MigrationConvergenceStatus } from "./migration-fix-loop-core.ts";
-import { discoverViewports, type ViewportSpec } from "./viewport-discovery.ts";
+import {
+  extractResponsiveBreakpointsFromHtml,
+  generateViewports,
+  mergeResponsiveBreakpoints,
+  type ResponsiveBreakpoint,
+  type ViewportSpec,
+} from "./viewport-discovery.ts";
 import type { VrtSnapshot } from "./types.ts";
 
 // ---- Config ----
@@ -64,6 +71,16 @@ function getArgList(args: string[], name: string): string[] {
 }
 function hasFlag(args: string[], name: string): boolean { return args.includes(`--${name}`); }
 
+export type BreakpointDiscoveryBackend = "auto" | "regex" | "crater";
+
+function parseDiscoveryBackend(args: string[]): BreakpointDiscoveryBackend {
+  const value = getArg(args, "discover-backend", "auto");
+  if (value === "auto" || value === "regex" || value === "crater") {
+    return value;
+  }
+  throw new Error(`invalid --discover-backend: ${value}`);
+}
+
 export interface MigrationCompareOptions {
   dir: string;
   baseline: string;
@@ -71,6 +88,7 @@ export interface MigrationCompareOptions {
   outputDir: string;
   fixedViewports?: ViewportSpec[];
   autoDiscover: boolean;
+  discoverBackend: BreakpointDiscoveryBackend;
   maxViewports: number;
   randomSamples: number;
   approvalPath: string;
@@ -85,8 +103,9 @@ export function parseMigrationCompareArgs(args: string[]): MigrationCompareOptio
     dir: getArg(args, "dir", "."),
     baseline: getArg(args, "baseline", args[0] ?? ""),
     variants: variants.length > 0 ? variants : (args[1] ? [args[1]] : []),
-    outputDir: join(process.cwd(), "test-results", "migration"),
+    outputDir: resolve(getArg(args, "output-dir", join(process.cwd(), "test-results", "migration"))),
     autoDiscover: !hasFlag(args, "no-discover"),
+    discoverBackend: parseDiscoveryBackend(args),
     maxViewports: parseInt(getArg(args, "max-viewports", "15"), 10),
     randomSamples: parseInt(getArg(args, "random-samples", "1"), 10),
     approvalPath: getArg(args, "approval", ""),
@@ -124,6 +143,42 @@ interface PaintTreeStatus {
   error?: string;
 }
 
+interface BreakpointDiscoveryStatus {
+  requestedBackend: BreakpointDiscoveryBackend;
+  backendUsed: "regex" | "crater";
+  fallbackReason?: string;
+  breakpoints: ResponsiveBreakpoint[];
+  diagnostics?: BreakpointDiscoveryDiagnosticsSummary;
+}
+
+export interface BreakpointDiscoveryDocumentInput {
+  label: string;
+  html: string;
+}
+
+export interface BreakpointDiscoveryDocumentDiagnostics extends CraterBreakpointDiscoveryDiagnostics {
+  label: string;
+}
+
+export interface BreakpointDiscoveryDiagnosticsSummary {
+  documents: BreakpointDiscoveryDocumentDiagnostics[];
+  totals: CraterBreakpointDiscoveryDiagnostics;
+}
+
+export interface BreakpointDiscoveryClient {
+  connect(): Promise<void>;
+  close(): Promise<void>;
+  setContent(html: string): Promise<void>;
+  getResponsiveBreakpoints(options?: {
+    mode?: "live-inline" | "html-inline";
+    axis?: "width";
+    includeDiagnostics?: boolean;
+  }): Promise<{
+    breakpoints: ResponsiveBreakpoint[];
+    diagnostics?: CraterBreakpointDiscoveryDiagnostics;
+  }>;
+}
+
 export interface MigrationCompareResult {
   variant: string;
   variantFile: string;
@@ -159,6 +214,7 @@ export interface MigrationCompareReport {
   baseline: string;
   variants: string[];
   viewports: ViewportSpec[];
+  breakpointDiscovery?: BreakpointDiscoveryStatus;
   approvalPath?: string;
   strict: boolean;
   approvalWarnings: Awaited<ReturnType<typeof collectApprovalWarnings>>;
@@ -172,7 +228,7 @@ export interface MigrationCompareReport {
 async function main(cliArgs = process.argv.slice(2)) {
   const options = parseMigrationCompareArgs(cliArgs);
   if (!options.baseline || options.variants.length === 0) {
-    console.log(`Usage: npx tsx src/migration-compare.ts --dir <dir> --baseline <file> --variants <file1> <file2> ... [--approval approval.json] [--strict] [--no-paint-tree] [--paint-tree-url ws://127.0.0.1:9222]`);
+    console.log(`Usage: npx tsx src/migration-compare.ts --dir <dir> --baseline <file> --variants <file1> <file2> ... [--output-dir path] [--approval approval.json] [--strict] [--discover-backend auto|regex|crater] [--no-paint-tree] [--paint-tree-url ws://127.0.0.1:9222]`);
     console.log(`   or: npx tsx src/migration-compare.ts <before.html> <after.html>`);
     process.exit(1);
   }
@@ -186,6 +242,7 @@ export async function runMigrationCompare(options: MigrationCompareOptions): Pro
     variants,
     outputDir,
     autoDiscover,
+    discoverBackend,
     maxViewports,
     randomSamples,
     approvalPath,
@@ -208,27 +265,40 @@ export async function runMigrationCompare(options: MigrationCompareOptions): Pro
     available: false,
     url: enablePaintTree ? paintTreeUrl : undefined,
   };
+  let breakpointDiscoveryStatus: BreakpointDiscoveryStatus | undefined;
 
   // Auto-discover breakpoints from all HTML files
   let VIEWPORTS: ViewportSpec[];
   if (options.fixedViewports && options.fixedViewports.length > 0) {
     VIEWPORTS = options.fixedViewports;
   } else if (autoDiscover) {
-    // Collect all HTML to find all breakpoints
-    const allHtmls = [baselineHtml];
+    const allHtmls: BreakpointDiscoveryDocumentInput[] = [
+      { label: "baseline", html: baselineHtml },
+    ];
     for (const v of variants) {
-      allHtmls.push(await readFile(resolve(dir, v), "utf-8"));
+      allHtmls.push({
+        label: `variant:${v}`,
+        html: await readFile(resolve(dir, v), "utf-8"),
+      });
     }
-    const combined = allHtmls.join("\n");
-    const discovery = discoverViewports(combined, {
+    breakpointDiscoveryStatus = await discoverResponsiveBreakpointsForHtmlDocuments(
+      allHtmls,
+      discoverBackend,
+      paintTreeUrl,
+    );
+    VIEWPORTS = generateViewports(breakpointDiscoveryStatus.breakpoints, {
       maxViewports,
       randomSamples,
     });
-    VIEWPORTS = discovery.viewports;
 
-    if (discovery.breakpoints.length > 0) {
+    console.log();
+    console.log(`  ${DIM}Breakpoint discovery: ${breakpointDiscoveryStatus.backendUsed}${RESET}`);
+    if (breakpointDiscoveryStatus.fallbackReason) {
+      console.log(`  ${YELLOW}! ${breakpointDiscoveryStatus.fallbackReason}${RESET}`);
+    }
+    if (breakpointDiscoveryStatus.breakpoints.length > 0) {
       console.log();
-      console.log(`  ${DIM}Discovered breakpoints: ${discovery.breakpoints.map((b) => `${b.type}:${b.value}px`).join(", ")}${RESET}`);
+      console.log(`  ${DIM}Discovered breakpoints: ${breakpointDiscoveryStatus.breakpoints.map(formatResponsiveBreakpoint).join(", ")}${RESET}`);
     }
   } else {
     VIEWPORTS = STATIC_VIEWPORTS;
@@ -567,6 +637,7 @@ export async function runMigrationCompare(options: MigrationCompareOptions): Pro
       baseline,
       variants,
       viewports: VIEWPORTS,
+      breakpointDiscovery: breakpointDiscoveryStatus,
       approvalPath: resolvedApprovalPath || undefined,
       strict,
       approvalWarnings,
@@ -692,6 +763,113 @@ async function resolveApprovalPath(dir: string, explicitPath: string): Promise<s
   } catch {
     return null;
   }
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const value of values) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    unique.push(value);
+  }
+  return unique;
+}
+
+export function summarizeBreakpointDiscoveryDiagnostics(
+  documents: Array<{
+    label: string;
+    diagnostics: CraterBreakpointDiscoveryDiagnostics | undefined;
+  }>,
+): BreakpointDiscoveryDiagnosticsSummary | undefined {
+  const entries: BreakpointDiscoveryDocumentDiagnostics[] = documents.flatMap(({ label, diagnostics }) => (
+    diagnostics ? [{ label, ...diagnostics }] : []
+  ));
+  if (entries.length === 0) return undefined;
+
+  return {
+    documents: entries,
+    totals: {
+      stylesheetCount: entries.reduce((sum, entry) => sum + entry.stylesheetCount, 0),
+      ruleCount: entries.reduce((sum, entry) => sum + entry.ruleCount, 0),
+      externalStylesheetLinks: uniqueStrings(
+        entries.flatMap((entry) => entry.externalStylesheetLinks),
+      ),
+      ignoredQueries: uniqueStrings(entries.flatMap((entry) => entry.ignoredQueries)),
+      unsupportedQueries: uniqueStrings(
+        entries.flatMap((entry) => entry.unsupportedQueries),
+      ),
+    },
+  };
+}
+
+export async function discoverResponsiveBreakpointsForHtmlDocuments(
+  htmlDocuments: BreakpointDiscoveryDocumentInput[],
+  backend: BreakpointDiscoveryBackend,
+  craterUrl: string,
+  createClient: (url: string) => BreakpointDiscoveryClient = (url) => new CraterClient(url),
+): Promise<BreakpointDiscoveryStatus> {
+  const regexBreakpoints = mergeResponsiveBreakpoints(
+    ...htmlDocuments.map(({ html }) => extractResponsiveBreakpointsFromHtml(html)),
+  );
+
+  if (backend === "regex") {
+    return {
+      requestedBackend: backend,
+      backendUsed: "regex",
+      breakpoints: regexBreakpoints,
+    };
+  }
+
+  try {
+    const client = createClient(craterUrl);
+    await client.connect();
+    try {
+      const craterCollections: ResponsiveBreakpoint[][] = [];
+      const diagnosticsEntries: Array<{
+        label: string;
+        diagnostics: CraterBreakpointDiscoveryDiagnostics | undefined;
+      }> = [];
+      for (const { label, html } of htmlDocuments) {
+        await client.setContent(html);
+        const result = await client.getResponsiveBreakpoints({
+          mode: "live-inline",
+          axis: "width",
+          includeDiagnostics: true,
+        });
+        craterCollections.push(result.breakpoints);
+        diagnosticsEntries.push({ label, diagnostics: result.diagnostics });
+      }
+      return {
+        requestedBackend: backend,
+        backendUsed: "crater",
+        breakpoints: mergeResponsiveBreakpoints(...craterCollections),
+        diagnostics: summarizeBreakpointDiscoveryDiagnostics(diagnosticsEntries),
+      };
+    } finally {
+      await client.close();
+    }
+  } catch (error) {
+    if (backend === "crater") {
+      throw new Error(`Crater breakpoint discovery failed: ${String(error)}`);
+    }
+    return {
+      requestedBackend: backend,
+      backendUsed: "regex",
+      fallbackReason: `Crater breakpoint discovery unavailable, falling back to regex: ${String(error)}`,
+      breakpoints: regexBreakpoints,
+    };
+  }
+}
+
+function formatResponsiveBreakpoint(breakpoint: ResponsiveBreakpoint): string {
+  const opLabel = {
+    ge: ">=",
+    gt: ">",
+    le: "<=",
+    lt: "<",
+  }[breakpoint.op];
+  return `width${opLabel}${breakpoint.valuePx}px`;
 }
 
 const isCliEntry = process.argv[1] ? resolve(process.argv[1]) === fileURLToPath(import.meta.url) : false;

@@ -1,6 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { extractBreakpoints, generateViewports, discoverViewports } from "./viewport-discovery.ts";
+import {
+  discoverViewports,
+  extractBreakpoints,
+  extractResponsiveBreakpointsFromHtml,
+  generateViewports,
+  mergeResponsiveBreakpoints,
+  toResponsiveBreakpoints,
+} from "./viewport-discovery.ts";
 
 describe("extractBreakpoints", () => {
   it("should extract min-width breakpoints", () => {
@@ -98,6 +105,34 @@ describe("generateViewports", () => {
     const vps = generateViewports(bps, { maxViewports: 5 });
     assert.ok(vps.length <= 5);
   });
+
+  it("should generate boundary viewports for canonical gt/lt breakpoints", () => {
+    const vps = generateViewports([
+      {
+        axis: "width",
+        op: "gt",
+        valuePx: 768,
+        raw: "(width > 768px)",
+        normalized: "(width > 768px)",
+        guards: [],
+        ruleCount: 1,
+      },
+      {
+        axis: "width",
+        op: "lt",
+        valuePx: 1024,
+        raw: "(width < 1024px)",
+        normalized: "(width < 1024px)",
+        guards: [],
+        ruleCount: 1,
+      },
+    ], { includeStandard: false });
+    const widths = vps.map((v) => v.width);
+    assert.ok(widths.includes(768), "should include 768 at gt boundary");
+    assert.ok(widths.includes(769), "should include 769 above gt boundary");
+    assert.ok(widths.includes(1023), "should include 1023 below lt boundary");
+    assert.ok(widths.includes(1024), "should include 1024 at lt boundary");
+  });
 });
 
 describe("discoverViewports", () => {
@@ -115,5 +150,83 @@ describe("discoverViewports", () => {
     assert.ok(widths.includes(640));
     assert.ok(widths.includes(1023));
     assert.ok(widths.includes(1024));
+  });
+});
+
+describe("responsive breakpoint helpers", () => {
+  it("should convert regex breakpoints into canonical responsive breakpoints", () => {
+    const responsive = toResponsiveBreakpoints([
+      { value: 768, type: "min-width", raw: "(min-width: 768px)" },
+      { value: 640, type: "max-width", raw: "(max-width: 640px)" },
+    ]);
+
+    assert.deepEqual(
+      responsive.map((bp) => ({ op: bp.op, valuePx: bp.valuePx })),
+      [
+        { op: "le", valuePx: 640 },
+        { op: "ge", valuePx: 768 },
+      ],
+    );
+  });
+
+  it("should merge responsive breakpoints across documents", () => {
+    const merged = mergeResponsiveBreakpoints(
+      [
+        {
+          axis: "width",
+          op: "ge",
+          valuePx: 768,
+          raw: "(min-width: 768px)",
+          normalized: "(width >= 768px)",
+          guards: [],
+          ruleCount: 1,
+        },
+      ],
+      [
+        {
+          axis: "width",
+          op: "ge",
+          valuePx: 768,
+          raw: "(min-width: 48rem)",
+          normalized: "(width >= 768px)",
+          guards: [],
+          ruleCount: 1,
+        },
+        {
+          axis: "width",
+          op: "le",
+          valuePx: 640,
+          raw: "(max-width: 640px)",
+          normalized: "(width <= 640px)",
+          guards: [],
+          ruleCount: 1,
+        },
+      ],
+    );
+
+    assert.deepEqual(
+      merged.map((bp) => ({ op: bp.op, valuePx: bp.valuePx, ruleCount: bp.ruleCount })),
+      [
+        { op: "le", valuePx: 640, ruleCount: 1 },
+        { op: "ge", valuePx: 768, ruleCount: 2 },
+      ],
+    );
+  });
+
+  it("should extract canonical responsive breakpoints from HTML", () => {
+    const html = `<style>
+      @media (min-width: 48rem) { .a { display: block; } }
+      @media (max-width: 640px) { .b { display: none; } }
+    </style>`;
+
+    const responsive = extractResponsiveBreakpointsFromHtml(html);
+
+    assert.deepEqual(
+      responsive.map((bp) => ({ op: bp.op, valuePx: bp.valuePx })),
+      [
+        { op: "le", valuePx: 640 },
+        { op: "ge", valuePx: 768 },
+      ],
+    );
   });
 });
