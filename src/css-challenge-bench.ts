@@ -58,6 +58,7 @@ import {
   type ComputedStyleTarget,
 } from "./css-custom-properties.ts";
 import { TRACKED_PROPERTIES } from "./computed-style-capture.ts";
+import { formatPlaywrightLaunchError, isPlaywrightSandboxRestrictionError } from "./playwright-launch-error.ts";
 import {
   hasAnyDetectionSignal,
   hasCraterPrescanSignal,
@@ -815,5 +816,12 @@ function fmtRateCompact(count: number, total: number, inverse = false): string {
 }
 
 if (import.meta.main) {
-  main().catch((e) => { console.error(e); process.exit(1); });
+  main().catch((error) => {
+    if (isPlaywrightSandboxRestrictionError(error)) {
+      console.error(formatPlaywrightLaunchError(error, { commandHint: "in your local terminal or in CI" }));
+    } else {
+      console.error(error);
+    }
+    process.exit(1);
+  });
 }

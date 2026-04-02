@@ -40,6 +40,7 @@ import {
   type InteractionTargetPlan,
   waitForInteractionStylesInDom,
 } from "./computed-style-capture.ts";
+import { formatPlaywrightLaunchError, isPlaywrightSandboxRestrictionError } from "./playwright-launch-error.ts";
 import type { A11yNode, VrtSnapshot, VrtDiff, VisualSemanticDiff, A11yDiff } from "./types.ts";
 
 // ---- Types ----
@@ -296,7 +297,15 @@ export function seededRandom(seed: number): () => number {
 export type RenderBackend = "chromium" | "crater";
 
 export async function createBrowser(viewport = { width: 1280, height: 900 }): Promise<{ browser: Browser; viewport: { width: number; height: number } }> {
-  const browser = await chromium.launch();
+  let browser: Browser;
+  try {
+    browser = await chromium.launch();
+  } catch (error) {
+    if (isPlaywrightSandboxRestrictionError(error)) {
+      throw new Error(formatPlaywrightLaunchError(error, { commandHint: "in your local terminal or in CI" }));
+    }
+    throw error;
+  }
   return { browser, viewport };
 }
 

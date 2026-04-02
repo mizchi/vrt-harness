@@ -6,6 +6,7 @@ import {
 } from "./css-challenge-core.ts";
 import type { MigrationDiffCategory } from "./migration-diff.ts";
 import type { MigrationFixCandidate } from "./migration-fix-candidates.ts";
+import { isPlaywrightSandboxRestrictionError } from "./playwright-launch-error.ts";
 import type { ViewportSpec } from "./viewport-discovery.ts";
 
 export interface MigrationCompareReportResult {
@@ -238,13 +239,7 @@ export function applyMigrationFixToCss(css: string, fix: MigrationFix): string {
 }
 
 export function shouldIgnoreMigrationRerunError(error: unknown): boolean {
-  const message = String(error);
-  return message.includes("browserType.launch:")
-    && (
-      message.includes("Operation not permitted")
-      || message.includes("Permission denied")
-      || message.includes("MachPortRendezvousServer")
-    );
+  return isPlaywrightSandboxRestrictionError(error);
 }
 
 function summarizeMigrationVariantConvergence(

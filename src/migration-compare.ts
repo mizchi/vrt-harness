@@ -52,6 +52,7 @@ import {
   type ResponsiveBreakpoint,
   type ViewportSpec,
 } from "./viewport-discovery.ts";
+import { formatPlaywrightLaunchError, isPlaywrightSandboxRestrictionError } from "./playwright-launch-error.ts";
 import type { VrtSnapshot } from "./types.ts";
 
 // ---- Config ----
@@ -336,7 +337,14 @@ export async function runMigrationCompare(options: MigrationCompareOptions): Pro
   };
 
   try {
-    browser = await chromium.launch();
+    try {
+      browser = await chromium.launch();
+    } catch (error) {
+      if (isPlaywrightSandboxRestrictionError(error)) {
+        throw new Error(formatPlaywrightLaunchError(error, { commandHint: "in your local terminal or in CI" }));
+      }
+      throw error;
+    }
     const baselineScreenshots = new Map<string, string>();
 
     if (enablePaintTree) {
@@ -875,5 +883,12 @@ function formatResponsiveBreakpoint(breakpoint: ResponsiveBreakpoint): string {
 const isCliEntry = process.argv[1] ? resolve(process.argv[1]) === fileURLToPath(import.meta.url) : false;
 
 if (isCliEntry) {
-  main().catch((e) => { console.error(e); process.exit(1); });
+  main().catch((error) => {
+    if (isPlaywrightSandboxRestrictionError(error)) {
+      console.error(formatPlaywrightLaunchError(error, { commandHint: "in your local terminal or in CI" }));
+    } else {
+      console.error(error);
+    }
+    process.exit(1);
+  });
 }

@@ -13,6 +13,7 @@
 import { readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { chromium } from "playwright";
+import { formatPlaywrightLaunchError, isPlaywrightSandboxRestrictionError } from "./playwright-launch-error.ts";
 import { applyApprovalToVrtDiff, collectApprovalWarnings, inferApprovalChangeType, loadApprovalManifest } from "./approval.ts";
 import { getCssChallengeFixturePath } from "./css-challenge-fixtures.ts";
 import { categorizeProperty } from "./css-challenge-core.ts";
@@ -151,7 +152,15 @@ function escapeRegex(s: string): string {
 // ---- Playwright capture ----
 
 async function capturePageState(html: string, screenshotPath: string): Promise<{ a11yTree: A11yNode; screenshotPath: string }> {
-  const browser = await chromium.launch();
+  let browser;
+  try {
+    browser = await chromium.launch();
+  } catch (error) {
+    if (isPlaywrightSandboxRestrictionError(error)) {
+      throw new Error(formatPlaywrightLaunchError(error, { commandHint: "in your local terminal or in CI" }));
+    }
+    throw error;
+  }
   const page = await browser.newPage({ viewport: VIEWPORT });
   await page.setContent(html, { waitUntil: "networkidle" });
   await page.screenshot({ path: screenshotPath, fullPage: true });
@@ -550,4 +559,11 @@ async function cleanup() {
   try { await rm(TMP, { recursive: true, force: true }); } catch { /* ignore */ }
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((error) => {
+  if (isPlaywrightSandboxRestrictionError(error)) {
+    console.error(formatPlaywrightLaunchError(error, { commandHint: "in your local terminal or in CI" }));
+  } else {
+    console.error(error);
+  }
+  process.exit(1);
+});
