@@ -454,6 +454,104 @@ after.html を見せず、before.html (Tailwind) + VRT diff だけで vanilla CS
 
 **vrt-harness は「移行を成立させるコードを生成する」基盤として十分に機能する。**
 
+### Reset CSS blind test (E3)
+
+> 詳細: `docs/reports/2026-04-04-e3-reset-css-blind-test.md`
+
+normalize.css → modern-normalize への切り替えで、app CSS の補償を blind で書かせた。
+
+| | 初期 diff | 修正後 | ラウンド | Tool calls | 時間 |
+|---|---|---|---|---|---|
+| Reset CSS (normalize → modern-normalize) | 2.6% | **0.0%** | **1** | **6** | **54s** |
+| Tailwind → vanilla CSS (比較) | 36.7% | 0.0% | 3 | 58 | 632s |
+
+修正内容: `*, *::before, *::after { box-sizing: content-box; }` の 1 行追加。
+modern-normalize のグローバル `border-box` を打ち消して normalize.css と同じ box model に戻した。
+
+## CSS 移行の Fix パターン集
+
+ブラインドテスト 2 件 + 通常評価 2 件の知見から、CSS 移行で頻出する diff 原因と fix パターンを体系化。
+
+### パターン 1: box-sizing の差異
+
+| | 症状 | 原因 | 修正 |
+|---|------|------|------|
+| **検出** | 全体的な layout-shift。mobile で顕著 | reset CSS が `border-box` をグローバル適用 (modern-normalize, Tailwind Preflight) | `*, ::before, ::after { box-sizing: content-box }` で打ち消す、または padding/border を考慮して width を調整 |
+| **VRT ヒント** | spatial pattern が全面的 (全要素が数 px ずれる) | | |
+| **難易度** | 低 — 1 行修正 | | |
+
+### パターン 2: line-height のセット漏れ
+
+| | 症状 | 原因 | 修正 |
+|---|------|------|------|
+| **検出** | テキスト行の垂直ズレが累積。mobile で顕著 | Tailwind `text-sm` = font-size + line-height のセット。vanilla CSS で font-size だけ書くと line-height が body から継承 | 各テキストサイズに対応する line-height を明示指定 |
+| **VRT ヒント** | heatmap でテキスト行ごとの横縞パターン | | |
+| **難易度** | 中 — マッピングテーブルが必要 | | |
+
+Tailwind line-height マッピング:
+```
+text-xs  (0.75rem)  → line-height: 1rem
+text-sm  (0.875rem) → line-height: 1.25rem
+text-base (1rem)    → line-height: 1.5rem
+text-lg  (1.125rem) → line-height: 1.75rem
+text-xl  (1.25rem)  → line-height: 1.75rem
+text-2xl (1.5rem)   → line-height: 2rem
+```
+
+### パターン 3: inline style vs CSS specificity
+
+| | 症状 | 原因 | 修正 |
+|---|------|------|------|
+| **検出** | 特定の要素が常に非表示/表示 | `style="display:none"` が CSS media query (`@media (min-width: 640px)`) より優先される | inline style を削除し、CSS クラスで制御 |
+| **VRT ヒント** | 特定 viewport でのみ要素が欠落 | | |
+| **難易度** | 低 — 構造の問題。CSS ではなく HTML の修正 | | |
+
+### パターン 4: 部分適用 (一部の要素にだけクラスがある)
+
+| | 症状 | 原因 | 修正 |
+|---|------|------|------|
+| **検出** | テーブルの行高さが微妙に異なる | Tailwind で `text-sm` が最初の 3 列だけに適用、最後の列は body デフォルト。vanilla CSS で全列に `font-size: 0.875rem` を適用すると過剰 | `td:not(:last-child) { font-size: 0.875rem }` 等のセレクタで限定 |
+| **VRT ヒント** | テーブル行の高さが均等にずれる (2px/行 × N 行 = 累積) | | |
+| **難易度** | 高 — before のクラス構造を読み解く必要がある | | |
+
+### パターン 5: Preflight / reset CSS のデフォルト差
+
+| | 症状 | 原因 | 修正 |
+|---|------|------|------|
+| **検出** | リストマーカー消失、form 要素の見た目変化 | destyle 等の aggressive reset で `list-style: none`, `appearance: none` が適用される | 必要なデフォルトを明示的に復元: `ul { list-style: disc }`, `select { appearance: auto }` |
+| **VRT ヒント** | diff が非常に大きい (6-12%)。特定の要素タイプに集中 | | |
+| **難易度** | 高 — drop-in 置換不可。normalize の再実装に近い | | |
+
+### パターン 6: heading の margin-top 欠落
+
+| | 症状 | 原因 | 修正 |
+|---|------|------|------|
+| **検出** | h1 以降の全コンテンツが上にずれる | normalize.css は `h1 { margin: 0.67em 0 }` を設定。modern-normalize はしない。app CSS が `margin-bottom` のみ指定で `margin-top` が異なる | `h1 { margin-top: 0.67em }` を追加 |
+| **VRT ヒント** | h1 の位置から下方向に累積シフト | | |
+| **難易度** | 低 — 1 行修正 | | |
+
+### パターン 7: font-smoothing の差
+
+| | 症状 | 原因 | 修正 |
+|---|------|------|------|
+| **検出** | 全テキストの微小な pixel diff (<0.5%) | Tailwind Preflight (PostCSS) は `-webkit-font-smoothing: antialiased` を含むが CDN 版は含まない | font-smoothing を明示指定、または削除して統一 |
+| **VRT ヒント** | diff が全面的だが比率が非常に小さい | | |
+| **難易度** | 低 — 1 行、ただしバージョン依存 | | |
+
+### Fix パターンの適用順序
+
+CSS 移行の diff を修正する際の推奨順序:
+
+1. **box-sizing** — 全体に影響。最初に揃える
+2. **heading/block の margin** — 上方向の累積シフトを解消
+3. **line-height** — テキスト行の垂直ズレを解消
+4. **inline style → CSS** — specificity 問題を解消
+5. **部分適用の修正** — セレクタの限定
+6. **Preflight デフォルト** — リストマーカー、form 要素
+7. **font-smoothing** — 最後の微調整
+
+この順序で適用すると、各ステップで diff が確実に減少し、VRT ループの収束が速い。
+
 ### 画像サイズ不一致の扱い
 
 初回テストで「高さが異なるとページ全体が 100% diff」になる問題が発覚。
