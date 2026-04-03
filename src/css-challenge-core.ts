@@ -32,6 +32,8 @@ import {
   buildComputedStyleCaptureExpression,
   buildComputedStyleCaptureJsonExpression,
   captureComputedStyleSnapshotInDom,
+  ESBUILD_NAME_POLYFILL,
+  type ComputedStyleSnapshot,
   collectInteractionTargetPlansInDom,
   computedStyleSnapshotToMap,
   parseComputedStyleSnapshot,
@@ -381,9 +383,11 @@ export async function capturePageState(
   const hoverComputedStyles = new Map<string, Record<string, string>>();
   if (options?.captureHover) {
     try {
-      const interactionPlans = await page.evaluate(collectInteractionTargetPlansInDom);
+      const interactionPlansExpr = `(function(){ ${ESBUILD_NAME_POLYFILL} return (${collectInteractionTargetPlansInDom.toString()})(); })()`;
+      const interactionPlans = await page.evaluate(interactionPlansExpr);
       const expectedInteractionPlans = buildInteractionTargetPlans(options.interactionSelectors ?? []);
-      const emulatedHoverStyles = await page.evaluate(captureEmulatedInteractionStyleSnapshotInDom, trackedProperties);
+      const hoverExpr = `(function(){ ${ESBUILD_NAME_POLYFILL} return (${captureEmulatedInteractionStyleSnapshotInDom.toString()})(${JSON.stringify(trackedProperties)}); })()`;
+      const emulatedHoverStyles = await page.evaluate(hoverExpr) as ComputedStyleSnapshot;
       const fallbackPlans = dedupeInteractionPlans([
         ...expectedInteractionPlans,
         ...selectInteractionFallbackPlans(
@@ -459,11 +463,9 @@ async function capturePlaywrightInteractionFallbackSnapshot(
       }
       interactionApplied = true;
 
-      await page.evaluate(waitForInteractionStylesInDom);
-      snapshots.push(await page.evaluate(captureComputedStyleSnapshotForTargetSelectorsInDom, {
-        props: trackedProperties,
-        selectors: [plan.normalizedSelector],
-      }));
+      await page.evaluate(`(function(){ ${ESBUILD_NAME_POLYFILL} return (${waitForInteractionStylesInDom.toString()})(); })()`);
+      const targetExpr = `(function(){ ${ESBUILD_NAME_POLYFILL} return (${captureComputedStyleSnapshotForTargetSelectorsInDom.toString()})(${JSON.stringify({ props: trackedProperties, selectors: [plan.normalizedSelector] })}); })()`;
+      snapshots.push(await page.evaluate(targetExpr) as ComputedStyleSnapshot);
     } catch { /* ignore individual fallback failures */ }
     finally {
       if (!interactionApplied) continue;
@@ -478,7 +480,8 @@ async function capturePlaywrightInteractionFallbackSnapshot(
         } else {
           await page.mouse.move(0, 0);
         }
-        await page.evaluate(waitForInteractionStylesInDom);
+        await page.evaluate(`(function(){ ${ESBUILD_NAME_POLYFILL} return (${waitForInteractionStylesInDom.toString()})(); })()`);
+
       } catch { /* ignore cleanup failures */ }
     }
   }
