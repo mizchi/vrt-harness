@@ -107,9 +107,10 @@ GET /api/status
 
 #### 2.2 Client SDK
 
-- [ ] TypeScript client (`@mizchi/vrt-client`)
+- [x] TypeScript client (`src/vrt-client.ts`)
 - [ ] CLI wrapper (`vrt compare --baseline a.html --current b.html`)
 - [ ] CI integration (GitHub Actions)
+- [ ] npm パッケージ化 (`@mizchi/vrt-client`)
 
 #### 2.3 データストレージ
 
