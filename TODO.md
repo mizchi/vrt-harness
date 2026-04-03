@@ -119,9 +119,19 @@ Tailwind blind test を別の fixture/シナリオで再現し、再現性を確
 - [ ] OpenAPI spec
 
 ### Crater 側 (mizchi/crater)
+
+**レンダリング修正**:
 - [ ] text-decoration #18 / border-radius #19 / font-weight #20 / margin #21 / align-items #22
+
+**VRT 検出率向上 (94.4% → 100%)**:
+- [ ] Breakpoint-aware CSS rule mapping #33 — media-scoped 検出漏れ解消
+- [ ] Hover/focus state computed style #34 — hover-only 検出漏れ解消
+- [ ] Computed styles BiDi #26 — prescanner 検出率 60% → 80%+
+- [ ] CSS rule usage tracking #27 — dead-code 判定
+
+**VRT 最適化**:
 - [ ] Paint tree diff API #23 / CSS mutation API #24 / Selector-scoped rendering #25
-- [ ] Computed styles BiDi #26 / CSS rule usage #27 / Batch rendering #28
+- [ ] Batch rendering #28
 - [ ] VRT prescanner benchmark tracking #29
 
 ### 機能拡張
