@@ -248,9 +248,12 @@ async function analyzeAcrossViewports(
 
     const visualDiffDetected = (analysis.vrtDiff?.diffPixels ?? 0) > 0;
     const paintTreeDiffCount = analysis.paintTreeChanges.length;
-    const computedStyleDiffCount = analysis.trackedComputedStyleTargets.length > 0
-      ? analysis.referencedComputedStyleDiffs.length
-      : analysis.computedStyleDiffs.length;
+    // In selector mode, use all computed style diffs (tracked targets filter is unreliable for multi-property deletion)
+    const computedStyleDiffCount = MODE === "selector"
+      ? analysis.computedStyleDiffs.length
+      : (analysis.trackedComputedStyleTargets.length > 0
+        ? analysis.referencedComputedStyleDiffs.length
+        : analysis.computedStyleDiffs.length);
 
     viewportResults.push({
       width: viewport.width,
@@ -421,7 +424,13 @@ async function runFixtureBenchmark(fixture: string) {
       property: removed.property,
       category: categorizeProperty(removed.property),
     } as const;
-    const expectedComputedStyleTargets = findExpectedComputedStyleTargets(removed, customPropertyUsage);
+    // In selector mode, track computed styles for ALL declarations in the block
+    const removedDeclarations = MODE === "selector"
+      ? (shuffledBlocks[i % shuffledBlocks.length]?.declarations ?? [removed])
+      : [removed];
+    const expectedComputedStyleTargets = removedDeclarations.flatMap(
+      (d) => findExpectedComputedStyleTargets(d, customPropertyUsage),
+    );
     const captureHover = classified.isInteractive ||
       expectedComputedStyleTargets.some((target) => isInteractiveSelector(target.selector));
 
