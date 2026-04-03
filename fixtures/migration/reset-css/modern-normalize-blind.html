@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reset CSS: modern-normalize v3.0.1</title>
+<style id="target-css">
+/* Reset: modern-normalize v3.0.1 */
+/*! modern-normalize v3.0.1 | MIT License | https://github.com/sindresorhus/modern-normalize */
+
+/*
+Document
+========
+*/
+
+/**
+Use a better box model (opinionated).
+*/
+
+*,
+::before,
+::after {
+	box-sizing: border-box;
+}
+
+html {
+	/* Improve consistency of default fonts in all browsers. (https://github.com/sindresorhus/modern-normalize/issues/3) */
+	font-family:
+		system-ui,
+		'Segoe UI',
+		Roboto,
+		Helvetica,
+		Arial,
+		sans-serif,
+		'Apple Color Emoji',
+		'Segoe UI Emoji';
+	line-height: 1.15; /* 1. Correct the line height in all browsers. */
+	-webkit-text-size-adjust: 100%; /* 2. Prevent adjustments of font size after orientation changes in iOS. */
+	tab-size: 4; /* 3. Use a more readable tab size (opinionated). */
+}
+
+/*
+Sections
+========
+*/
+
+body {
+	margin: 0; /* Remove the margin in all browsers. */
+}
+
+/*
+Text-level semantics
+====================
+*/
+
+/**
+Add the correct font weight in Chrome and Safari.
+*/
+
+b,
+strong {
+	font-weight: bolder;
+}
+
+/**
+1. Improve consistency of default fonts in all browsers. (https://github.com/sindresorhus/modern-normalize/issues/3)
+2. Correct the odd 'em' font sizing in all browsers.
+*/
+
+code,
+kbd,
+samp,
+pre {
+	font-family:
+		ui-monospace,
+		SFMono-Regular,
+		Consolas,
+		'Liberation Mono',
+		Menlo,
+		monospace; /* 1 */
+	font-size: 1em; /* 2 */
+}
+
+/**
+Add the correct font size in all browsers.
+*/
+
+small {
+	font-size: 80%;
+}
+
+/**
+Prevent 'sub' and 'sup' elements from affecting the line height in all browsers.
+*/
+
+sub,
+sup {
+	font-size: 75%;
+	line-height: 0;
+	position: relative;
+	vertical-align: baseline;
+}
+
+sub {
+	bottom: -0.25em;
+}
+
+sup {
+	top: -0.5em;
+}
+
+/*
+Tabular data
+============
+*/
+
+/**
+Correct table border color inheritance in Chrome and Safari. (https://issues.chromium.org/issues/40615503, https://bugs.webkit.org/show_bug.cgi?id=195016)
+*/
+
+table {
+	border-color: currentcolor;
+}
+
+/*
+Forms
+=====
+*/
+
+/**
+1. Change the font styles in all browsers.
+2. Remove the margin in Firefox and Safari.
+*/
+
+button,
+input,
+optgroup,
+select,
+textarea {
+	font-family: inherit; /* 1 */
+	font-size: 100%; /* 1 */
+	line-height: 1.15; /* 1 */
+	margin: 0; /* 2 */
+}
+
+/**
+Correct the inability to style clickable types in iOS and Safari.
+*/
+
+button,
+[type='button'],
+[type='reset'],
+[type='submit'] {
+	-webkit-appearance: button;
+}
+
+/**
+Remove the padding so developers are not caught out when they zero out 'fieldset' elements in all browsers.
+*/
+
+legend {
+	padding: 0;
+}
+
+/**
+Add the correct vertical alignment in Chrome and Firefox.
+*/
+
+progress {
+	vertical-align: baseline;
+}
+
+/**
+Correct the cursor style of increment and decrement buttons in Safari.
+*/
+
+::-webkit-inner-spin-button,
+::-webkit-outer-spin-button {
+	height: auto;
+}
+
+/**
+1. Correct the odd appearance in Chrome and Safari.
+2. Correct the outline style in Safari.
+*/
+
+[type='search'] {
+	-webkit-appearance: textfield; /* 1 */
+	outline-offset: -2px; /* 2 */
+}
+
+/**
+Remove the inner padding in Chrome and Safari on macOS.
+*/
+
+::-webkit-search-decoration {
+	-webkit-appearance: none;
+}
+
+/**
+1. Correct the inability to style clickable types in iOS and Safari.
+2. Change font properties to 'inherit' in Safari.
+*/
+
+::-webkit-file-upload-button {
+	-webkit-appearance: button; /* 1 */
+	font: inherit; /* 2 */
+}
+
+/*
+Interactive
+===========
+*/
+
+/*
+Add the correct display in Chrome and Safari.
+*/
+
+summary {
+	display: list-item;
+}
+
+
+
+/* Application styles — same across all resets */
+*, *::before, *::after { box-sizing: content-box; }
+body { font-family: system-ui, sans-serif; line-height: 1.6; color: #1e293b; max-width: 720px; margin: 0 auto; padding: 24px 16px; }
+header { border-bottom: 1px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 24px; }
+header nav { display: flex; gap: 16px; }
+header a { color: #2563eb; text-decoration: none; font-weight: 500; }
+header a:hover { text-decoration: underline; }
+main { display: flex; flex-direction: column; gap: 32px; }
+article { border-bottom: 1px solid #f1f5f9; padding-bottom: 24px; }
+h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+h2 { font-size: 20px; font-weight: 600; margin-bottom: 12px; }
+p { margin-bottom: 8px; }
+a { color: #2563eb; }
+code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
+pre { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 8px 0; }
+pre code { background: none; padding: 0; }
+blockquote { border-left: 3px solid #cbd5e1; padding-left: 16px; color: #64748b; margin: 8px 0; }
+ul, ol { padding-left: 24px; margin: 8px 0; }
+li { margin: 4px 0; }
+form > div { margin-bottom: 16px; }
+label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+input[type="text"], input[type="email"], textarea, select { width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; }
+textarea { resize: vertical; }
+button { padding: 8px 16px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+button[type="submit"] { background: #2563eb; color: white; border: none; }
+button[type="button"] { background: white; color: #374151; border: 1px solid #d1d5db; }
+button[type="reset"] { background: white; color: #dc2626; border: 1px solid #fecaca; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+th { font-weight: 600; font-size: 13px; color: #64748b; text-transform: uppercase; }
+img { max-width: 100%; height: auto; border-radius: 8px; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 16px 0; }
+details { margin: 8px 0; }
+summary { cursor: pointer; font-weight: 500; }
+footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 14px; }
+footer nav { margin-top: 8px; }
+footer a { color: #64748b; text-decoration: none; }
+
+@media (max-width: 640px) {
+  body { padding: 16px; }
+  h1 { font-size: 24px; }
+  header nav { flex-wrap: wrap; gap: 8px; }
+  table { font-size: 13px; }
+  th, td { padding: 6px 8px; }
+}
+
+</style>
+</head>
+<body>
+<!-- 共通コンテンツ。各 reset-*.html がこれを include する -->
+<header>
+  <nav>
+    <a href="#">Home</a>
+    <a href="#">About</a>
+    <a href="#">Contact</a>
+  </nav>
+</header>
+
+<main>
+  <h1>Migration VRT Test</h1>
+  <p>This page tests whether switching reset CSS produces visual differences.</p>
+
+  <article>
+    <h2>Typography</h2>
+    <p>Normal paragraph with <strong>bold</strong>, <em>italic</em>, and <a href="#">link</a> text.</p>
+    <p>Second paragraph with <code>inline code</code> and <small>small text</small>.</p>
+    <blockquote>Blockquote text that should have consistent styling across reset CSS variants.</blockquote>
+    <pre><code>code block {
+  display: block;
+  padding: 16px;
+}</code></pre>
+  </article>
+
+  <article>
+    <h2>Lists</h2>
+    <ul>
+      <li>Unordered item 1</li>
+      <li>Unordered item 2</li>
+      <li>Nested list
+        <ul>
+          <li>Nested item A</li>
+          <li>Nested item B</li>
+        </ul>
+      </li>
+    </ul>
+    <ol>
+      <li>Ordered item 1</li>
+      <li>Ordered item 2</li>
+      <li>Ordered item 3</li>
+    </ol>
+  </article>
+
+  <article>
+    <h2>Form Elements</h2>
+    <form>
+      <div>
+        <label for="name">Name</label>
+        <input type="text" id="name" placeholder="Enter name" value="Alice">
+      </div>
+      <div>
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="you@example.com">
+      </div>
+      <div>
+        <label for="message">Message</label>
+        <textarea id="message" rows="3">Hello world</textarea>
+      </div>
+      <div>
+        <label><input type="checkbox" checked> Agree to terms</label>
+      </div>
+      <div>
+        <label><input type="radio" name="plan" checked> Free</label>
+        <label><input type="radio" name="plan"> Pro</label>
+      </div>
+      <div>
+        <select>
+          <option>Option A</option>
+          <option selected>Option B</option>
+          <option>Option C</option>
+        </select>
+      </div>
+      <div>
+        <button type="submit">Submit</button>
+        <button type="button">Cancel</button>
+        <button type="reset">Reset</button>
+      </div>
+    </form>
+  </article>
+
+  <article>
+    <h2>Table</h2>
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Role</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Alice</td><td>Developer</td><td>Active</td></tr>
+        <tr><td>Bob</td><td>Designer</td><td>Inactive</td></tr>
+        <tr><td>Carol</td><td>Manager</td><td>Active</td></tr>
+      </tbody>
+    </table>
+  </article>
+
+  <article>
+    <h2>Media & Misc</h2>
+    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='100' viewBox='0 0 200 100'%3E%3Crect fill='%23e2e8f0' width='200' height='100'/%3E%3Ctext x='100' y='55' text-anchor='middle' fill='%2364748b'%3EPlaceholder%3C/text%3E%3C/svg%3E" alt="Placeholder image">
+    <hr>
+    <details>
+      <summary>Expandable section</summary>
+      <p>Hidden content revealed on click.</p>
+    </details>
+  </article>
+</main>
+
+<footer>
+  <p>&copy; 2026 VRT Harness. All rights reserved.</p>
+  <nav>
+    <a href="#">Terms</a> · <a href="#">Privacy</a> · <a href="#">Contact</a>
+  </nav>
+</footer>
+
+</body>
+</html>
