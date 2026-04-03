@@ -30,6 +30,7 @@ const URL_ARG = getArg("url", "");
 const FILE_ARG = getArg("file", args[0] && !args[0].startsWith("--") ? args[0] : "");
 const MAX_ACTIONS = parseInt(getArg("max-actions", "30"), 10);
 const SEED = parseInt(getArg("seed", String(Date.now())), 10);
+const MODE = getArg("mode", "random") as "random" | "reasoning";
 const VIEWPORT = { width: 1280, height: 900 };
 
 // ---- Terminal ----
@@ -254,15 +255,61 @@ export async function runSmokeTest(
   const initialSnap = await buildA11ySnapshot(page, 0);
   if (initialSnap) snapshots.push(initialSnap);
 
+  // LLM reasoning mode: pre-generate action plan
+  let plannedActions: ActionCandidate[] | null = null;
+  if (request.mode === "reasoning") {
+    const { createLLMProvider } = await import("./llm-client.ts");
+    const llm = createLLMProvider();
+    if (llm && initialSnap) {
+      try {
+        const candidates = await discoverActions(page);
+        const candidateList = candidates.map((c) => `- ${c.action} ${c.role}: "${c.name}"`).join("\n");
+        const prompt = `You are testing a web page by interacting with it like a real user.
+
+Available interactive elements:
+${candidateList}
+
+Generate a realistic user interaction sequence (${maxActions} steps).
+Each step should be a natural user action (e.g., fill a form, navigate, toggle settings).
+
+Respond with one action per line in this EXACT format:
+ACTION: <click|type|check|uncheck> ROLE: <role> NAME: <name> VALUE: <optional value for type>
+
+Example:
+ACTION: type ROLE: textbox NAME: Email VALUE: test@example.com
+ACTION: click ROLE: button NAME: Submit`;
+
+        const response = await llm.complete(prompt);
+        plannedActions = [];
+        for (const line of response.split("\n")) {
+          const m = line.match(/ACTION:\s*(\w+)\s+ROLE:\s*(\w+)\s+NAME:\s*(.+?)(?:\s+VALUE:\s*(.+))?$/);
+          if (m) {
+            plannedActions.push({
+              role: m[2],
+              name: m[3].trim(),
+              selector: "",
+              action: m[1] as SmokeAction["action"],
+              value: m[4]?.trim(),
+            });
+          }
+        }
+      } catch { /* fallback to random */ }
+    }
+  }
+
   // Action loop
   for (let step = 0; step < maxActions; step++) {
-    const candidates = await discoverActions(page);
-    if (candidates.length === 0) {
-      break; // No interactive elements
-    }
+    let candidate: ActionCandidate;
 
-    // Pick random candidate
-    const candidate = candidates[Math.floor(rand() * candidates.length)];
+    if (plannedActions && step < plannedActions.length) {
+      // LLM reasoning mode: follow the plan
+      candidate = plannedActions[step];
+    } else {
+      // Random mode: discover and pick
+      const candidates = await discoverActions(page);
+      if (candidates.length === 0) break;
+      candidate = candidates[Math.floor(rand() * candidates.length)];
+    }
     const actionStart = Date.now();
     let result: SmokeAction["result"] = "ok";
 
@@ -388,7 +435,7 @@ async function main() {
 
   const result = await runSmokeTest({
     target,
-    mode: "random",
+    mode: MODE,
     maxActions: MAX_ACTIONS,
     seed: SEED,
     blockExternalNavigation: true,
