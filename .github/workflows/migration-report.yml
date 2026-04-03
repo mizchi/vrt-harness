@@ -41,20 +41,20 @@ jobs:
           OUTPUT_DIR="$RUNNER_TEMP/migration-report"
           case "${{ inputs.scenario }}" in
             tailwind-to-vanilla)
-              pnpm exec tsx src/migration-compare.ts \
+              node --experimental-strip-types src/migration-compare.ts \
                 fixtures/migration/tailwind-to-vanilla/before.html \
                 fixtures/migration/tailwind-to-vanilla/after.html \
                 --output-dir "$OUTPUT_DIR"
               ;;
             reset-css)
-              pnpm exec tsx src/migration-compare.ts \
+              node --experimental-strip-types src/migration-compare.ts \
                 --dir fixtures/migration/reset-css \
                 --baseline normalize.html \
                 --variants modern-normalize.html destyle.html no-reset.html \
                 --output-dir "$OUTPUT_DIR"
               ;;
             shadcn-to-luna)
-              pnpm exec tsx src/migration-compare.ts \
+              node --experimental-strip-types src/migration-compare.ts \
                 --dir fixtures/migration/shadcn-to-luna \
                 --baseline before.html \
                 --variants after.html \

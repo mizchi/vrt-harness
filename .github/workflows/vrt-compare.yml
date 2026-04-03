@@ -1,0 +1,122 @@
+name: VRT Compare
+
+on:
+  pull_request:
+    paths:
+      - "fixtures/**"
+      - "src/**"
+      - "package.json"
+  workflow_dispatch:
+    inputs:
+      before:
+        description: "Before HTML file path"
+        required: false
+        default: ""
+      after:
+        description: "After HTML file path"
+        required: false
+        default: ""
+      scenario:
+        description: "Predefined scenario"
+        required: false
+        default: "tailwind-to-vanilla"
+        type: choice
+        options:
+          - tailwind-to-vanilla
+          - reset-css
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run VRT Compare
+        run: |
+          if [ -n "${{ inputs.before }}" ] && [ -n "${{ inputs.after }}" ]; then
+            node --experimental-strip-types src/vrt.ts compare \
+              "${{ inputs.before }}" "${{ inputs.after }}"
+          elif [ "${{ inputs.scenario }}" = "reset-css" ]; then
+            node --experimental-strip-types src/vrt.ts compare \
+              --dir fixtures/migration/reset-css \
+              --baseline normalize.html \
+              --variants modern-normalize.html destyle.html no-reset.html
+          else
+            node --experimental-strip-types src/vrt.ts compare \
+              fixtures/migration/tailwind-to-vanilla/before.html \
+              fixtures/migration/tailwind-to-vanilla/after.html
+          fi
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vrt-compare-report
+          path: test-results/migration/migration-report.json
+          if-no-files-found: warn
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - name: Smoke test fixtures
+        run: |
+          for fixture in page dashboard form-app; do
+            echo "=== Smoke test: $fixture ==="
+            node --experimental-strip-types src/vrt.ts smoke \
+              "fixtures/css-challenge/$fixture.html" \
+              --max-actions 15 --seed 42 || true
+          done
+
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run CSS benchmark
+        run: |
+          node --experimental-strip-types src/vrt.ts bench \
+            --fixture page --trials 15 --no-db
+
+      - name: Run unit tests
+        run: pnpm test
