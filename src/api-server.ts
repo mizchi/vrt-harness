@@ -85,32 +85,26 @@ app.post("/api/compare", async (c) => {
       const height = vp.height ?? 900;
       const label = vp.label ?? `${width}x${height}`;
 
+      const { capturePageState, diffComputedStyles } = await import("./css-challenge-core.ts");
+      const captureOpts = {
+        captureHover: body.options?.hoverEmulation ?? false,
+      };
+
       // Capture baseline
-      const basePage = await browser.newPage({ viewport: { width, height } });
-      await basePage.setContent(baselineHtml, { waitUntil: "networkidle" });
-      const basePath = join(tmpDir, `baseline-${label}.png`);
-      await basePage.screenshot({ path: basePath, fullPage: true });
-      await basePage.close();
+      const baseState = await capturePageState(browser, { width, height }, baselineHtml,
+        join(tmpDir, `baseline-${label}.png`), captureOpts);
 
       // Capture current
-      const curPage = await browser.newPage({ viewport: { width, height } });
-      await curPage.setContent(currentHtml, { waitUntil: "networkidle" });
-      const curPath = join(tmpDir, `current-${label}.png`);
-      await curPage.screenshot({ path: curPath, fullPage: true });
-      await curPage.close();
+      const curState = await capturePageState(browser, { width, height }, currentHtml,
+        join(tmpDir, `current-${label}.png`), captureOpts);
 
-      // Compare
+      // Pixel diff
       const diff = await compareScreenshots({
-        testId: label,
-        testTitle: label,
-        projectName: "api",
-        screenshotPath: curPath,
-        baselinePath: basePath,
+        testId: label, testTitle: label, projectName: "api",
+        screenshotPath: curState.screenshotPath,
+        baselinePath: baseState.screenshotPath,
         status: "changed",
-      }, {
-        outputDir: tmpDir,
-        threshold: body.options?.threshold ?? 0.1,
-      });
+      }, { outputDir: tmpDir, threshold: body.options?.threshold ?? 0.1 });
 
       const pixelDiff: PixelDiffResult = {
         diffPixels: diff?.diffPixels ?? 0,
@@ -119,9 +113,25 @@ app.post("/api/compare", async (c) => {
         regions: diff?.regions ?? [],
       };
 
+      // Computed style diff
+      let computedStyleDiff: ViewportResult["computedStyleDiff"];
+      if (body.options?.computedStyle !== false) {
+        const csDiffs = diffComputedStyles(baseState.computedStyles, curState.computedStyles);
+        if (csDiffs.length > 0) {
+          computedStyleDiff = {
+            changes: csDiffs.map((d) => ({
+              selector: d.selector, property: d.property,
+              before: d.before, after: d.after,
+            })),
+            count: csDiffs.length,
+          };
+        }
+      }
+
       viewportResults.push({
         viewport: { width, height, label },
         pixelDiff,
+        computedStyleDiff,
         status: pixelDiff.diffRatio === 0 ? "pass" : "fail",
       });
     }
