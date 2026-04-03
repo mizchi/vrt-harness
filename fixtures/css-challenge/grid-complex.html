@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Complex Grid + Calc + Variables Challenge</title>
+<style id="target-css">
+:root { --sidebar-w: 260px; --header-h: 48px; --gap: 16px; --radius: 8px; --color-bg: #0f172a; --color-surface: #1e293b; --color-surface-hover: #334155; --color-border: rgba(255,255,255,0.08); --color-text: #f1f5f9; --color-muted: #94a3b8; --color-accent: #38bdf8; --color-accent-dim: rgba(56,189,248,0.15); --color-success: #4ade80; --color-warning: #fbbf24; --color-danger: #f87171; --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: var(--color-bg); color: var(--color-text); line-height: 1.5; }
+
+/* app shell: grid with named areas */
+.app { display: grid; grid-template-areas: "sidebar header" "sidebar main"; grid-template-columns: var(--sidebar-w) 1fr; grid-template-rows: var(--header-h) 1fr; min-height: 100vh; }
+
+/* sidebar */
+.sidebar { grid-area: sidebar; background: var(--color-surface); border-right: 1px solid var(--color-border); padding: 16px; display: flex; flex-direction: column; overflow-y: auto; }
+.sidebar-logo { font-size: 16px; font-weight: 700; color: var(--color-accent); padding: 8px; margin-bottom: 16px; letter-spacing: -0.5px; }
+.nav-group { margin-bottom: 24px; }
+.nav-group-label { font-size: 11px; font-weight: 600; color: var(--color-muted); text-transform: uppercase; letter-spacing: 1px; padding: 0 8px; margin-bottom: 8px; }
+.nav-link { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: var(--radius); font-size: 14px; color: var(--color-muted); cursor: pointer; transition: background 0.15s, color 0.15s; }
+.nav-link:hover { background: var(--color-surface-hover); color: var(--color-text); }
+.nav-link.active { background: var(--color-accent-dim); color: var(--color-accent); }
+.nav-icon { width: 18px; text-align: center; font-size: 14px; }
+.nav-badge { margin-left: auto; font-size: 11px; padding: 1px 6px; border-radius: 10px; background: var(--color-accent-dim); color: var(--color-accent); font-weight: 600; }
+.sidebar-footer { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--color-border); }
+
+/* header */
+.header { grid-area: header; background: var(--color-surface); border-bottom: 1px solid var(--color-border); padding: 0 24px; display: flex; align-items: center; gap: 16px; }
+.breadcrumb { font-size: 13px; color: var(--color-muted); display: flex; gap: 8px; align-items: center; }
+.breadcrumb-sep { color: var(--color-border); }
+.breadcrumb-current { color: var(--color-text); font-weight: 500; }
+.header-search { margin-left: auto; padding: 6px 12px; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius); color: var(--color-muted); font-size: 13px; width: 240px; }
+.header-search::placeholder { color: var(--color-muted); opacity: 0.6; }
+
+/* main content */
+.main { grid-area: main; padding: 24px; overflow-y: auto; }
+
+/* stats: auto-fill grid with minmax */
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--gap); margin-bottom: 24px; }
+.stat { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 16px; position: relative; overflow: hidden; }
+.stat::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+.stat-accent::before { background: var(--color-accent); }
+.stat-success::before { background: var(--color-success); }
+.stat-warning::before { background: var(--color-warning); }
+.stat-danger::before { background: var(--color-danger); }
+.stat-label { font-size: 12px; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.stat-value { font-size: 24px; font-weight: 700; font-family: var(--font-mono); }
+.stat-change { font-size: 12px; margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+.stat-up { color: var(--color-success); }
+.stat-down { color: var(--color-danger); }
+
+/* data grid: complex table with calc() widths */
+.data-grid { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); overflow: hidden; }
+.data-grid-header { padding: 12px 16px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; justify-content: space-between; }
+.data-grid-title { font-size: 15px; font-weight: 600; }
+.data-grid-controls { display: flex; gap: 8px; }
+.data-grid-btn { padding: 5px 12px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-muted); font-size: 12px; cursor: pointer; }
+.data-grid-btn:hover { background: var(--color-surface-hover); color: var(--color-text); }
+.data-grid-btn.active { background: var(--color-accent-dim); color: var(--color-accent); border-color: var(--color-accent); }
+table { width: 100%; border-collapse: collapse; }
+th { padding: 10px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--color-border); white-space: nowrap; }
+td { padding: 10px 16px; font-size: 13px; border-bottom: 1px solid var(--color-border); }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--color-surface-hover); }
+/* calc() based column widths */
+th:nth-child(1), td:nth-child(1) { width: calc(var(--sidebar-w) - 60px); }
+th:nth-child(2), td:nth-child(2) { width: 25%; }
+th:nth-child(3), td:nth-child(3) { width: calc(100% - var(--sidebar-w) - 25% - 200px); min-width: 120px; }
+td:nth-child(4) { text-align: right; font-family: var(--font-mono); }
+
+/* status indicators */
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.status-active .status-dot { background: var(--color-success); box-shadow: 0 0 6px var(--color-success); }
+.status-pending .status-dot { background: var(--color-warning); }
+.status-error .status-dot { background: var(--color-danger); animation: pulse 2s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* sparkline (pure CSS) */
+.sparkline { display: flex; align-items: flex-end; gap: 2px; height: 24px; }
+.spark-bar { width: 4px; background: var(--color-accent); border-radius: 1px; transition: height 0.3s; opacity: 0.6; }
+.spark-bar:last-child { opacity: 1; }
+
+/* pagination */
+.pagination { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-top: 1px solid var(--color-border); }
+.pagination-info { font-size: 12px; color: var(--color-muted); }
+.pagination-btns { display: flex; gap: 4px; }
+.page-btn { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-muted); font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.page-btn:hover { background: var(--color-surface-hover); }
+.page-btn.active { background: var(--color-accent); color: white; border-color: var(--color-accent); }
+
+/* responsive: collapse sidebar */
+@media (max-width: 1024px) {
+  .app { grid-template-areas: "header" "main"; grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  th:nth-child(1), td:nth-child(1) { width: auto; }
+  th:nth-child(3), td:nth-child(3) { width: auto; min-width: 0; }
+}
+@media (max-width: 640px) {
+  .stats { grid-template-columns: 1fr; }
+  .data-grid-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  th:nth-child(3), td:nth-child(3) { display: none; }
+  .pagination { flex-direction: column; gap: 8px; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <nav class="sidebar" role="navigation" aria-label="Main">
+    <div class="sidebar-logo">⚡ CraterDB</div>
+    <div class="nav-group">
+      <div class="nav-group-label">Monitor</div>
+      <a class="nav-link active"><span class="nav-icon">📊</span> Dashboard</a>
+      <a class="nav-link"><span class="nav-icon">📈</span> Analytics <span class="nav-badge">New</span></a>
+      <a class="nav-link"><span class="nav-icon">🔔</span> Alerts <span class="nav-badge">5</span></a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">Manage</div>
+      <a class="nav-link"><span class="nav-icon">🗄️</span> Tables</a>
+      <a class="nav-link"><span class="nav-icon">🔧</span> Queries</a>
+      <a class="nav-link"><span class="nav-icon">👥</span> Users</a>
+      <a class="nav-link"><span class="nav-icon">⚙️</span> Settings</a>
+    </div>
+    <div class="sidebar-footer">
+      <a class="nav-link"><span class="nav-icon">📖</span> Documentation</a>
+    </div>
+  </nav>
+
+  <header class="header" role="banner">
+    <div class="breadcrumb">
+      <span>Monitor</span>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-current">Dashboard</span>
+    </div>
+    <input class="header-search" type="search" placeholder="Search... (⌘K)" aria-label="Search">
+  </header>
+
+  <main class="main" role="main">
+    <div class="stats">
+      <div class="stat stat-accent">
+        <div class="stat-label">Queries / sec</div>
+        <div class="stat-value">12,847</div>
+        <div class="stat-change stat-up">↑ 23%</div>
+      </div>
+      <div class="stat stat-success">
+        <div class="stat-label">Uptime</div>
+        <div class="stat-value">99.97%</div>
+        <div class="stat-change stat-up">↑ 0.02%</div>
+      </div>
+      <div class="stat stat-warning">
+        <div class="stat-label">Latency (p95)</div>
+        <div class="stat-value">4.2ms</div>
+        <div class="stat-change stat-down">↓ 12%</div>
+      </div>
+      <div class="stat stat-danger">
+        <div class="stat-label">Error Rate</div>
+        <div class="stat-value">0.03%</div>
+        <div class="stat-change stat-up">↑ 0.01%</div>
+      </div>
+    </div>
+
+    <div class="data-grid">
+      <div class="data-grid-header">
+        <h2 class="data-grid-title">Active Connections</h2>
+        <div class="data-grid-controls">
+          <button class="data-grid-btn active">All</button>
+          <button class="data-grid-btn">Active</button>
+          <button class="data-grid-btn">Idle</button>
+        </div>
+      </div>
+      <table aria-label="Active connections">
+        <thead><tr><th>Client</th><th>Status</th><th>Query</th><th>Duration</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>app-server-01</td>
+            <td><span class="status status-active"><span class="status-dot"></span> Active</span></td>
+            <td style="font-family: var(--font-mono); font-size: 12px; color: var(--color-muted);">SELECT * FROM users WHERE...</td>
+            <td>
+              <div class="sparkline">
+                <div class="spark-bar" style="height: 40%"></div>
+                <div class="spark-bar" style="height: 60%"></div>
+                <div class="spark-bar" style="height: 35%"></div>
+                <div class="spark-bar" style="height: 80%"></div>
+                <div class="spark-bar" style="height: 55%"></div>
+                <div class="spark-bar" style="height: 90%"></div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td>worker-pool-03</td>
+            <td><span class="status status-pending"><span class="status-dot"></span> Idle</span></td>
+            <td style="font-family: var(--font-mono); font-size: 12px; color: var(--color-muted);">—</td>
+            <td>
+              <div class="sparkline">
+                <div class="spark-bar" style="height: 20%"></div>
+                <div class="spark-bar" style="height: 15%"></div>
+                <div class="spark-bar" style="height: 10%"></div>
+                <div class="spark-bar" style="height: 5%"></div>
+                <div class="spark-bar" style="height: 10%"></div>
+                <div class="spark-bar" style="height: 8%"></div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td>analytics-cron</td>
+            <td><span class="status status-error"><span class="status-dot"></span> Error</span></td>
+            <td style="font-family: var(--font-mono); font-size: 12px; color: var(--color-danger);">INSERT INTO logs VALUES...</td>
+            <td>
+              <div class="sparkline">
+                <div class="spark-bar" style="height: 95%"></div>
+                <div class="spark-bar" style="height: 100%"></div>
+                <div class="spark-bar" style="height: 90%"></div>
+                <div class="spark-bar" style="height: 100%"></div>
+                <div class="spark-bar" style="height: 95%"></div>
+                <div class="spark-bar" style="height: 100%"></div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td>backup-service</td>
+            <td><span class="status status-active"><span class="status-dot"></span> Active</span></td>
+            <td style="font-family: var(--font-mono); font-size: 12px; color: var(--color-muted);">COPY orders TO '/tmp/...'</td>
+            <td>
+              <div class="sparkline">
+                <div class="spark-bar" style="height: 70%"></div>
+                <div class="spark-bar" style="height: 65%"></div>
+                <div class="spark-bar" style="height: 72%"></div>
+                <div class="spark-bar" style="height: 68%"></div>
+                <div class="spark-bar" style="height: 75%"></div>
+                <div class="spark-bar" style="height: 70%"></div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pagination">
+        <span class="pagination-info">Showing 1-4 of 24</span>
+        <div class="pagination-btns">
+          <button class="page-btn">‹</button>
+          <button class="page-btn active">1</button>
+          <button class="page-btn">2</button>
+          <button class="page-btn">3</button>
+          <button class="page-btn">›</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

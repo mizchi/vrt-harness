@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stacking Context Challenge</title>
+<style id="target-css">
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, sans-serif; background: #f8fafc; color: #0f172a; min-height: 100vh; }
+
+/* sticky header */
+.header { position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,0.95); backdrop-filter: blur(8px); border-bottom: 1px solid #e2e8f0; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; }
+.header-title { font-size: 18px; font-weight: 700; }
+.header-actions { display: flex; gap: 8px; align-items: center; }
+
+/* notification badge */
+.notif-btn { position: relative; padding: 8px; border: none; background: none; cursor: pointer; font-size: 18px; }
+.notif-badge { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; background: #ef4444; color: white; font-size: 10px; font-weight: 700; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 1; }
+
+/* dropdown menu */
+.dropdown { position: relative; }
+.dropdown-trigger { padding: 8px 16px; border: 1px solid #d1d5db; border-radius: 8px; background: white; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.dropdown-menu { position: absolute; top: calc(100% + 4px); right: 0; width: 200px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); z-index: 100; padding: 4px; }
+.dropdown-item { padding: 8px 12px; border-radius: 6px; font-size: 14px; cursor: pointer; display: block; width: 100%; border: none; background: none; text-align: left; }
+.dropdown-item:hover { background: #f1f5f9; }
+.dropdown-divider { height: 1px; background: #e2e8f0; margin: 4px 0; }
+
+/* main content */
+.main { max-width: 1200px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 1fr 320px; gap: 24px; }
+
+/* card with overlapping elements */
+.card { background: white; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; position: relative; }
+.card-featured { border-color: #3b82f6; }
+.card-badge { position: absolute; top: 12px; left: 12px; padding: 4px 10px; background: #3b82f6; color: white; font-size: 11px; font-weight: 600; border-radius: 6px; z-index: 2; text-transform: uppercase; letter-spacing: 0.5px; }
+.card-image { width: 100%; height: 200px; object-fit: cover; display: block; }
+.card-image-placeholder { width: 100%; height: 200px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 48px; }
+.card-body { padding: 16px; }
+.card-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+.card-desc { font-size: 14px; color: #64748b; line-height: 1.5; margin-bottom: 12px; }
+.card-footer { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-top: 1px solid #f1f5f9; }
+.card-price { font-size: 20px; font-weight: 700; color: #0f172a; }
+.card-price-old { font-size: 14px; color: #94a3b8; text-decoration: line-through; margin-left: 8px; }
+
+/* tooltip */
+.tooltip-trigger { position: relative; cursor: help; border-bottom: 1px dashed #94a3b8; }
+.tooltip-content { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); padding: 8px 12px; background: #1e293b; color: white; font-size: 12px; border-radius: 6px; white-space: nowrap; z-index: 200; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+.tooltip-content::after { content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #1e293b; }
+.tooltip-trigger:hover .tooltip-content { opacity: 1; }
+
+/* modal overlay */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+.modal { background: white; border-radius: 16px; width: 90%; max-width: 480px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); z-index: 1001; overflow: hidden; }
+.modal-header { padding: 20px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+.modal-title { font-size: 18px; font-weight: 600; }
+.modal-close { width: 32px; height: 32px; border-radius: 8px; border: none; background: none; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; color: #64748b; }
+.modal-close:hover { background: #f1f5f9; }
+.modal-body { padding: 24px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid #e2e8f0; display: flex; gap: 8px; justify-content: flex-end; }
+.btn { padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; }
+.btn-primary { background: #3b82f6; color: white; }
+.btn-secondary { background: white; color: #374151; border: 1px solid #d1d5db; }
+
+/* sidebar with fixed position */
+.sidebar { position: sticky; top: 80px; height: calc(100vh - 104px); overflow-y: auto; }
+.sidebar-section { margin-bottom: 24px; }
+.sidebar-title { font-size: 14px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+.sidebar-list { list-style: none; }
+.sidebar-item { padding: 8px 12px; border-radius: 8px; font-size: 14px; cursor: pointer; margin-bottom: 2px; }
+.sidebar-item:hover { background: #f1f5f9; }
+.sidebar-item.active { background: #eff6ff; color: #2563eb; font-weight: 500; }
+
+/* toast notification (fixed bottom-right) */
+.toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; background: #1e293b; color: white; border-radius: 10px; font-size: 14px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2); z-index: 2000; display: flex; align-items: center; gap: 10px; max-width: 360px; }
+.toast-icon { font-size: 18px; flex-shrink: 0; }
+.toast-close { margin-left: auto; opacity: 0.7; cursor: pointer; font-size: 16px; }
+
+/* floating action button */
+.fab { position: fixed; bottom: 80px; right: 24px; width: 56px; height: 56px; border-radius: 50%; background: #3b82f6; color: white; border: none; font-size: 24px; cursor: pointer; box-shadow: 0 8px 15px -3px rgba(59,130,246,0.4); z-index: 500; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, box-shadow 0.2s; }
+.fab:hover { transform: scale(1.1); box-shadow: 0 12px 20px -3px rgba(59,130,246,0.5); }
+
+/* progress bar overlay */
+.progress-overlay { position: fixed; top: 56px; left: 0; right: 0; height: 3px; z-index: 60; background: #e2e8f0; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); width: 67%; transition: width 0.3s; }
+
+/* responsive */
+@media (max-width: 768px) {
+  .main { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; }
+  .dropdown-menu { width: 100%; left: 0; right: 0; }
+  .modal { width: 95%; }
+  .toast { left: 16px; right: 16px; max-width: none; }
+  .fab { bottom: 24px; right: 16px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Progress bar (above sticky header) -->
+<div class="progress-overlay"><div class="progress-fill"></div></div>
+
+<header class="header" role="banner">
+  <span class="header-title">Dashboard</span>
+  <div class="header-actions">
+    <button class="notif-btn" aria-label="Notifications">
+      🔔<span class="notif-badge">3</span>
+    </button>
+    <div class="dropdown">
+      <button class="dropdown-trigger" aria-haspopup="true">
+        <span>Menu</span> ▾
+      </button>
+      <div class="dropdown-menu" role="menu">
+        <button class="dropdown-item" role="menuitem">Profile</button>
+        <button class="dropdown-item" role="menuitem">Settings</button>
+        <div class="dropdown-divider"></div>
+        <button class="dropdown-item" role="menuitem">Sign out</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="main" role="main">
+  <div>
+    <!-- Featured card with overlapping badge -->
+    <div class="card card-featured" style="margin-bottom: 24px;">
+      <span class="card-badge">Featured</span>
+      <div class="card-image-placeholder">📊</div>
+      <div class="card-body">
+        <h2 class="card-title">Analytics Dashboard</h2>
+        <p class="card-desc">
+          Real-time analytics with
+          <span class="tooltip-trigger">
+            advanced filtering
+            <span class="tooltip-content">Filter by date, region, and custom segments</span>
+          </span>
+          and export capabilities.
+        </p>
+      </div>
+      <div class="card-footer">
+        <div>
+          <span class="card-price">$29</span>
+          <span class="card-price-old">$49</span>
+        </div>
+        <button class="btn btn-primary">Get Started</button>
+      </div>
+    </div>
+
+    <!-- Regular cards -->
+    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+      <div class="card">
+        <div class="card-image-placeholder" style="height: 140px; background: linear-gradient(135deg, #f093fb, #f5576c);">📈</div>
+        <div class="card-body">
+          <h3 class="card-title">Reports</h3>
+          <p class="card-desc">Generate custom reports with drag-and-drop builder.</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-image-placeholder" style="height: 140px; background: linear-gradient(135deg, #4facfe, #00f2fe);">🔧</div>
+        <div class="card-body">
+          <h3 class="card-title">Integrations</h3>
+          <p class="card-desc">Connect with 50+ third-party services.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <aside class="sidebar" role="complementary">
+    <div class="sidebar-section">
+      <div class="sidebar-title">Categories</div>
+      <ul class="sidebar-list">
+        <li class="sidebar-item active">All Products</li>
+        <li class="sidebar-item">Analytics</li>
+        <li class="sidebar-item">Automation</li>
+        <li class="sidebar-item">Security</li>
+        <li class="sidebar-item">Integrations</li>
+      </ul>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">Tags</div>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+        <span style="padding: 4px 10px; background: #eff6ff; color: #2563eb; border-radius: 12px; font-size: 12px;">Popular</span>
+        <span style="padding: 4px 10px; background: #f0fdf4; color: #16a34a; border-radius: 12px; font-size: 12px;">New</span>
+        <span style="padding: 4px 10px; background: #fef9c3; color: #a16207; border-radius: 12px; font-size: 12px;">Sale</span>
+        <span style="padding: 4px 10px; background: #fce7f3; color: #be185d; border-radius: 12px; font-size: 12px;">Premium</span>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Confirm action">
+    <div class="modal-header">
+      <span class="modal-title">Confirm Purchase</span>
+      <button class="modal-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size: 14px; color: #64748b; line-height: 1.6;">
+        You are about to purchase <strong>Analytics Dashboard</strong> for <strong>$29/month</strong>.
+        This will be charged to your default payment method.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary">Cancel</button>
+      <button class="btn btn-primary">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" role="alert">
+  <span class="toast-icon">✓</span>
+  <span>Item added to cart successfully</span>
+  <span class="toast-close" aria-label="Dismiss">✕</span>
+</div>
+
+<!-- FAB -->
+<button class="fab" aria-label="Create new">+</button>
+
+</body>
+</html>
