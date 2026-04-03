@@ -85,6 +85,10 @@ migration-shadcn:
 bench:
   node --experimental-strip-types src/benchmark.ts
 
+# API server (Hono, localhost)
+api-server *args:
+  node --experimental-strip-types src/api-server.ts {{args}}
+
 # A11y-driven smoke test (random interaction)
 smoke-test *args:
   node --experimental-strip-types src/smoke-runner.ts {{args}}

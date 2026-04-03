@@ -420,4 +420,7 @@ async function main() {
   process.exit(result.status === "pass" ? 0 : 1);
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+// Run CLI only when executed directly
+if (process.argv[1]?.endsWith("smoke-runner.ts")) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}

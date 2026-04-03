@@ -20,6 +20,8 @@
     "pngjs": "^7.0.0"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.12",
+    "hono": "^4.12.10",
     "ws": "^8.20.0"
   }
 }
