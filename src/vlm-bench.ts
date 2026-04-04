@@ -46,10 +46,10 @@ function formatCost(costPer1k: number): string {
 async function runList() {
   const maxCost = getArg("max-cost", "") ? parseFloat(getArg("max-cost", "999")) : undefined;
   const limit = getArg("limit", "") ? parseInt(getArg("limit", "50"), 10) : 50;
-  const models = await listModels({ maxCost, limit });
+  const models = await listModels({ maxCost, limit, includeGemini: true });
 
   console.log();
-  console.log(`${BOLD}${CYAN}Vision-capable models on OpenRouter${RESET}  ${DIM}(${models.length} shown)${RESET}`);
+  console.log(`${BOLD}${CYAN}Vision-capable models${RESET}  ${DIM}(${models.length} shown, OpenRouter + Gemini direct)${RESET}`);
   console.log();
   console.log(`  ${"#".padStart(3)} ${"Model ID".padEnd(52)} ${"Prompt/1K".padStart(12)} ${"Compl/1K".padStart(12)} ${"Context".padStart(9)}`);
   console.log(`  ${"─".repeat(3)} ${"─".repeat(52)} ${"─".repeat(12)} ${"─".repeat(12)} ${"─".repeat(9)}`);
@@ -257,11 +257,17 @@ ${BOLD}Model selection:${RESET}
 
 ${BOLD}Examples:${RESET}
   vlm-bench gemma-3-27b:free llama-3.2-11b-vision qwen3-vl-8b
+  vlm-bench gemini:gemini-2.5-flash-preview-05-20 qwen3-vl-8b   # Gemini direct vs OpenRouter
   vlm-bench --image test-results/migration/heatmap.png gemma-3-27b:free
   vlm-bench --list --max-cost 0.0001 --limit 10
 
+${BOLD}Providers:${RESET}
+  OpenRouter:  model ID as-is (e.g. qwen/qwen3-vl-8b-instruct)
+  Gemini:      gemini:<model-id> (e.g. gemini:gemini-2.5-flash-preview-05-20)
+
 ${BOLD}Environment:${RESET}
-  OPENROUTER_API_KEY    Required for model execution (not for --list)
+  OPENROUTER_API_KEY    Required for OpenRouter models
+  GEMINI_API_KEY        Required for Gemini direct models (or GOOGLE_AI_API_KEY)
 `);
   } else {
     await runBench(modelArgs);

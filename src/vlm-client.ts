@@ -1,8 +1,11 @@
 /**
  * VLM (Vision Language Model) クライアント
  *
- * OpenRouter API 経由で画像認識 + reasoning を行う。
- * モデル一覧は OpenRouter API から動的に取得。
+ * 複数プロバイダ対応:
+ * - OpenRouter (100+ vision models)
+ * - Google AI (Gemini 直接)
+ *
+ * モデル一覧は API から動的に取得。
  */
 import { readFile } from "node:fs/promises";
 
@@ -63,8 +66,13 @@ export async function fetchVisionModels(): Promise<VlmModel[]> {
   return _cachedModels;
 }
 
-export async function listModels(options?: { maxCost?: number; limit?: number }): Promise<VlmModel[]> {
-  const models = await fetchVisionModels();
+export async function listModels(options?: { maxCost?: number; limit?: number; includeGemini?: boolean }): Promise<VlmModel[]> {
+  const openRouterModels = await fetchVisionModels();
+  const models = (options?.includeGemini !== false)
+    ? [...GOOGLE_MODELS, ...openRouterModels]
+    : openRouterModels;
+  // Sort by cost
+  models.sort((a, b) => a.promptCostPer1k - b.promptCostPer1k);
   let filtered = models;
   if (options?.maxCost !== undefined) {
     filtered = filtered.filter((m) => m.promptCostPer1k <= options.maxCost!);
@@ -76,6 +84,10 @@ export async function listModels(options?: { maxCost?: number; limit?: number })
 }
 
 export async function resolveModel(idOrIndex: string): Promise<VlmModel> {
+  // Check Gemini direct models first
+  const geminiModel = resolveGeminiModel(idOrIndex);
+  if (geminiModel) return geminiModel;
+
   const models = await fetchVisionModels();
 
   // Exact ID match
@@ -102,12 +114,134 @@ export async function resolveModel(idOrIndex: string): Promise<VlmModel> {
   throw new Error(`Model not found: "${idOrIndex}". Use --list to see available models.`);
 }
 
-// ---- Client ----
+// ---- Google AI (Gemini direct) ----
+
+const GOOGLE_MODELS: VlmModel[] = [
+  { id: "gemini:gemini-2.5-flash-preview-05-20", name: "Gemini 2.5 Flash (direct)", promptCostPer1k: 1.5e-7, completionCostPer1k: 6e-7, contextLength: 1048576, modality: "text+image->text" },
+  { id: "gemini:gemini-2.0-flash", name: "Gemini 2.0 Flash (direct)", promptCostPer1k: 1e-7, completionCostPer1k: 4e-7, contextLength: 1048576, modality: "text+image->text" },
+  { id: "gemini:gemini-2.0-flash-lite", name: "Gemini 2.0 Flash Lite (direct)", promptCostPer1k: 7.5e-8, completionCostPer1k: 3e-7, contextLength: 1048576, modality: "text+image->text" },
+];
+
+export function isGeminiDirectModel(id: string): boolean {
+  return id.startsWith("gemini:");
+}
+
+export function resolveGeminiModel(id: string): VlmModel | undefined {
+  return GOOGLE_MODELS.find((m) => m.id === id || m.id === `gemini:${id}`);
+}
+
+export function listGeminiModels(): VlmModel[] {
+  return [...GOOGLE_MODELS];
+}
+
+function createGeminiClient(model: VlmModel, apiKey: string): VlmClient {
+  const geminiModelId = model.id.replace("gemini:", "");
+
+  async function callGemini(
+    imageBase64: string,
+    textPrompt: string,
+    maxTokens: number,
+  ): Promise<VlmResponse> {
+    const { GoogleGenerativeAI } = await import("@google/generative-ai");
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const genModel = genAI.getGenerativeModel({ model: geminiModelId });
+
+    const start = Date.now();
+    const result = await genModel.generateContent({
+      contents: [{
+        role: "user",
+        parts: [
+          { inlineData: { mimeType: "image/png", data: imageBase64 } },
+          { text: textPrompt },
+        ],
+      }],
+      generationConfig: { maxOutputTokens: maxTokens },
+    });
+
+    const latencyMs = Date.now() - start;
+    const response = result.response;
+    const content = response.text();
+    const usage = response.usageMetadata;
+    const promptTokens = usage?.promptTokenCount ?? 0;
+    const completionTokens = usage?.candidatesTokenCount ?? 0;
+    const costUsd = (promptTokens / 1000) * model.promptCostPer1k +
+                    (completionTokens / 1000) * model.completionCostPer1k;
+
+    return {
+      content,
+      model: model.id,
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
+      costUsd,
+      latencyMs,
+    };
+  }
+
+  return {
+    model,
+    async analyzeImage(imageBase64, prompt, options) {
+      return callGemini(imageBase64, prompt, options?.maxTokens ?? 1024);
+    },
+    async analyzeImageFile(imagePath, prompt, options) {
+      const buf = await readFile(imagePath);
+      return this.analyzeImage(buf.toString("base64"), prompt, options);
+    },
+    async analyzeDiff(baselineBase64, currentBase64, prompt, options) {
+      // Gemini supports multiple images in one request
+      const { GoogleGenerativeAI } = await import("@google/generative-ai");
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const genModel = genAI.getGenerativeModel({ model: geminiModelId });
+
+      const start = Date.now();
+      const result = await genModel.generateContent({
+        contents: [{
+          role: "user",
+          parts: [
+            { text: "Baseline screenshot:" },
+            { inlineData: { mimeType: "image/png", data: baselineBase64 } },
+            { text: "Current screenshot:" },
+            { inlineData: { mimeType: "image/png", data: currentBase64 } },
+            { text: prompt },
+          ],
+        }],
+        generationConfig: { maxOutputTokens: options?.maxTokens ?? 1024 },
+      });
+
+      const latencyMs = Date.now() - start;
+      const response = result.response;
+      const usage = response.usageMetadata;
+      const promptTokens = usage?.promptTokenCount ?? 0;
+      const completionTokens = usage?.candidatesTokenCount ?? 0;
+
+      return {
+        content: response.text(),
+        model: model.id,
+        promptTokens,
+        completionTokens,
+        totalTokens: promptTokens + completionTokens,
+        costUsd: (promptTokens / 1000) * model.promptCostPer1k +
+                 (completionTokens / 1000) * model.completionCostPer1k,
+        latencyMs,
+      };
+    },
+  };
+}
+
+// ---- Client factory ----
 
 export function createVlmClient(
   model: VlmModel,
   apiKey?: string,
 ): VlmClient | null {
+  // Gemini direct
+  if (isGeminiDirectModel(model.id)) {
+    const key = apiKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_AI_API_KEY;
+    if (!key) return null;
+    return createGeminiClient(model, key);
+  }
+
+  // OpenRouter
   const key = apiKey ?? process.env.OPENROUTER_API_KEY;
   if (!key) return null;
 
