@@ -238,6 +238,10 @@ export async function runSmokeTest(
   // Load page
   try {
     if (request.target.url) {
+      // Security: only allow http/https URLs
+      if (!request.target.url.startsWith("http://") && !request.target.url.startsWith("https://")) {
+        throw new Error(`Unsupported URL scheme: ${request.target.url}. Only http:// and https:// are allowed.`);
+      }
       await page.goto(request.target.url, { waitUntil: "networkidle", timeout: 30000 });
     } else if (request.target.html) {
       await page.setContent(request.target.html, { waitUntil: "networkidle" });

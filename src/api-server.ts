@@ -7,6 +7,7 @@
  *
  * Usage: node --experimental-strip-types src/api-server.ts [--port 3456]
  */
+import crypto from "node:crypto";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { readFile } from "node:fs/promises";
@@ -62,7 +63,7 @@ app.post("/api/compare", async (c) => {
   const { mkdir } = await import("node:fs/promises");
   const { join } = await import("node:path");
 
-  const tmpDir = join(process.cwd(), "test-results", "api", Date.now().toString());
+  const tmpDir = join(process.cwd(), "test-results", "api", crypto.randomUUID());
   await mkdir(tmpDir, { recursive: true });
 
   // Discover viewports
@@ -285,9 +286,17 @@ async function resolveHtmlSource(source: HtmlSource): Promise<string | null> {
   if (source.html) return source.html;
   if (source.url) {
     try {
-      if (source.url.startsWith("file://") || !source.url.includes("://")) {
-        const path = source.url.replace("file://", "");
-        return await readFile(path, "utf-8");
+      // Security: only allow http/https URLs, block file:// and private networks
+      if (!source.url.startsWith("http://") && !source.url.startsWith("https://")) {
+        return null;
+      }
+      const parsed = new URL(source.url);
+      // Block private/internal IPs
+      const hostname = parsed.hostname;
+      if (hostname === "localhost" || hostname.startsWith("127.") || hostname.startsWith("10.") ||
+          hostname.startsWith("172.") || hostname.startsWith("192.168.") || hostname === "169.254.169.254" ||
+          hostname === "[::1]" || hostname === "0.0.0.0") {
+        return null;
       }
       const res = await fetch(source.url);
       return await res.text();
@@ -300,5 +309,5 @@ async function resolveHtmlSource(source: HtmlSource): Promise<string | null> {
 
 // ---- Server ----
 
-console.log(`vrt-harness API server on http://localhost:${PORT}`);
-serve({ fetch: app.fetch, port: PORT });
+console.log(`vrt-harness API server on http://127.0.0.1:${PORT}`);
+serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" });

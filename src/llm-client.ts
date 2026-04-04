@@ -101,7 +101,10 @@ function createAnthropicClient(apiKey: string, model?: string): UnifiedLLMClient
       }),
     });
 
-    if (!res.ok) throw new Error(`Anthropic API error: ${res.status} ${await res.text()}`);
+    if (!res.ok) {
+      const body = (await res.text()).slice(0, 200);
+      throw new Error(`Anthropic API error: ${res.status} ${body}`);
+    }
 
     const data = await res.json() as {
       content: Array<{ type: string; text: string }>;
