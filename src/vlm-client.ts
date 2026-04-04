@@ -2,11 +2,7 @@
  * VLM (Vision Language Model) クライアント
  *
  * OpenRouter API 経由で画像認識 + reasoning を行う。
- * モデルごとのコスト追跡と、コスパ評価機能付き。
- *
- * Usage:
- *   const vlm = createVlmClient();
- *   const result = await vlm.analyzeImage(pngBuffer, "What CSS differences do you see?");
+ * モデル一覧は OpenRouter API から動的に取得。
  */
 import { readFile } from "node:fs/promises";
 
@@ -14,10 +10,11 @@ import { readFile } from "node:fs/promises";
 
 export interface VlmModel {
   id: string;
-  promptCostPer1k: number;  // $/1K tokens
+  name: string;
+  promptCostPer1k: number;
   completionCostPer1k: number;
   contextLength: number;
-  tier: "free" | "cheap" | "mid" | "premium";
+  modality: string;
 }
 
 export interface VlmResponse {
@@ -37,61 +34,82 @@ export interface VlmClient {
   analyzeDiff(baselineBase64: string, currentBase64: string, prompt: string, options?: { maxTokens?: number }): Promise<VlmResponse>;
 }
 
-export interface VlmBenchResult {
-  model: string;
-  tier: string;
-  costUsd: number;
-  latencyMs: number;
-  responseLength: number;
-  /** 0-10 quality score (manual or auto-eval) */
-  qualityScore?: number;
-  costEfficiency?: number;  // qualityScore / costUsd
+// ---- Model discovery from OpenRouter API ----
+
+let _cachedModels: VlmModel[] | null = null;
+
+export async function fetchVisionModels(): Promise<VlmModel[]> {
+  if (_cachedModels) return _cachedModels;
+
+  const res = await fetch("https://openrouter.ai/api/v1/models");
+  if (!res.ok) throw new Error(`OpenRouter API error: ${res.status}`);
+  const data = await res.json() as { data: any[] };
+
+  _cachedModels = data.data
+    .filter((m: any) => {
+      const inputMods = m.architecture?.input_modalities ?? [];
+      return inputMods.includes("image");
+    })
+    .map((m: any) => ({
+      id: m.id,
+      name: m.name ?? m.id,
+      promptCostPer1k: parseFloat(m.pricing?.prompt ?? "999"),
+      completionCostPer1k: parseFloat(m.pricing?.completion ?? "999"),
+      contextLength: m.context_length ?? 0,
+      modality: m.architecture?.modality ?? "",
+    }))
+    .sort((a: VlmModel, b: VlmModel) => a.promptCostPer1k - b.promptCostPer1k);
+
+  return _cachedModels;
 }
 
-// ---- Model registry ----
-
-export const VLM_MODELS: VlmModel[] = [
-  // Free tier
-  { id: "google/gemma-3-27b-it:free", promptCostPer1k: 0, completionCostPer1k: 0, contextLength: 131072, tier: "free" },
-  { id: "google/gemma-3-12b-it:free", promptCostPer1k: 0, completionCostPer1k: 0, contextLength: 32768, tier: "free" },
-  { id: "google/gemma-3n-e4b-it:free", promptCostPer1k: 0, completionCostPer1k: 0, contextLength: 8192, tier: "free" },
-
-  // Cheap tier ($0-$0.0001/1K)
-  { id: "meta-llama/llama-3.2-11b-vision-instruct", promptCostPer1k: 4.9e-8, completionCostPer1k: 4.9e-8, contextLength: 131072, tier: "cheap" },
-  { id: "qwen/qwen3-vl-8b-instruct", promptCostPer1k: 8e-8, completionCostPer1k: 5e-7, contextLength: 131072, tier: "cheap" },
-  { id: "amazon/nova-lite-v1", promptCostPer1k: 6e-8, completionCostPer1k: 2.4e-7, contextLength: 300000, tier: "cheap" },
-  { id: "bytedance/ui-tars-1.5-7b", promptCostPer1k: 1e-7, completionCostPer1k: 2e-7, contextLength: 128000, tier: "cheap" },
-
-  // Mid tier ($0.0001-$0.001/1K)
-  { id: "qwen/qwen3-vl-32b-instruct", promptCostPer1k: 1e-7, completionCostPer1k: 4.2e-7, contextLength: 131072, tier: "mid" },
-  { id: "google/gemini-2.0-flash-001", promptCostPer1k: 1e-7, completionCostPer1k: 4e-7, contextLength: 1048576, tier: "mid" },
-  { id: "anthropic/claude-3.5-haiku", promptCostPer1k: 8e-7, completionCostPer1k: 4e-6, contextLength: 200000, tier: "mid" },
-
-  // Premium tier (>$0.001/1K)
-  { id: "anthropic/claude-sonnet-4", promptCostPer1k: 3e-6, completionCostPer1k: 1.5e-5, contextLength: 200000, tier: "premium" },
-  { id: "openai/gpt-4o", promptCostPer1k: 2.5e-6, completionCostPer1k: 1e-5, contextLength: 128000, tier: "premium" },
-];
-
-export function getModelByTier(tier: VlmModel["tier"]): VlmModel {
-  const model = VLM_MODELS.find((m) => m.tier === tier);
-  if (!model) throw new Error(`No model found for tier: ${tier}`);
-  return model;
+export async function listModels(options?: { maxCost?: number; limit?: number }): Promise<VlmModel[]> {
+  const models = await fetchVisionModels();
+  let filtered = models;
+  if (options?.maxCost !== undefined) {
+    filtered = filtered.filter((m) => m.promptCostPer1k <= options.maxCost!);
+  }
+  if (options?.limit) {
+    filtered = filtered.slice(0, options.limit);
+  }
+  return filtered;
 }
 
-export function getModelById(id: string): VlmModel | undefined {
-  return VLM_MODELS.find((m) => m.id === id);
+export async function resolveModel(idOrIndex: string): Promise<VlmModel> {
+  const models = await fetchVisionModels();
+
+  // Exact ID match
+  const exact = models.find((m) => m.id === idOrIndex);
+  if (exact) return exact;
+
+  // Partial match — prefer exact substring, then fuzzy
+  const partial = models.filter((m) => m.id.includes(idOrIndex));
+  if (partial.length === 1) return partial[0];
+  if (partial.length > 1) {
+    // Prefer shortest match (most specific)
+    const sorted = partial.sort((a, b) => a.id.length - b.id.length);
+    // If the shortest is a clear prefix match, use it
+    if (sorted[0].id.endsWith(idOrIndex) || sorted[0].id.includes(`/${idOrIndex}`)) {
+      return sorted[0];
+    }
+    throw new Error(`Ambiguous model "${idOrIndex}". Matches: ${partial.slice(0, 5).map((m) => m.id).join(", ")}\nTip: use more specific ID, e.g. "${partial[0].id}"`);
+  }
+
+  // Numeric index
+  const idx = parseInt(idOrIndex, 10);
+  if (!isNaN(idx) && idx >= 0 && idx < models.length) return models[idx];
+
+  throw new Error(`Model not found: "${idOrIndex}". Use --list to see available models.`);
 }
 
 // ---- Client ----
 
 export function createVlmClient(
-  modelOrTier: string = "free",
+  model: VlmModel,
   apiKey?: string,
 ): VlmClient | null {
   const key = apiKey ?? process.env.OPENROUTER_API_KEY;
   if (!key) return null;
-
-  const model = getModelById(modelOrTier) ?? getModelByTier(modelOrTier as VlmModel["tier"]);
 
   async function callOpenRouter(
     messages: Array<{ role: string; content: any }>,
@@ -115,7 +133,7 @@ export function createVlmClient(
 
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`OpenRouter API error: ${res.status} ${text}`);
+      throw new Error(`OpenRouter API error: ${res.status} ${text.slice(0, 200)}`);
     }
 
     const data = await res.json() as {
@@ -142,7 +160,7 @@ export function createVlmClient(
   return {
     model,
 
-    async analyzeImage(imageBase64: string, prompt: string, options?: { maxTokens?: number }): Promise<VlmResponse> {
+    async analyzeImage(imageBase64, prompt, options) {
       return callOpenRouter([{
         role: "user",
         content: [
@@ -152,12 +170,12 @@ export function createVlmClient(
       }], options?.maxTokens ?? 1024);
     },
 
-    async analyzeImageFile(imagePath: string, prompt: string, options?: { maxTokens?: number }): Promise<VlmResponse> {
+    async analyzeImageFile(imagePath, prompt, options) {
       const buf = await readFile(imagePath);
       return this.analyzeImage(buf.toString("base64"), prompt, options);
     },
 
-    async analyzeDiff(baselineBase64: string, currentBase64: string, prompt: string, options?: { maxTokens?: number }): Promise<VlmResponse> {
+    async analyzeDiff(baselineBase64, currentBase64, prompt, options) {
       return callOpenRouter([{
         role: "user",
         content: [
@@ -170,46 +188,4 @@ export function createVlmClient(
       }], options?.maxTokens ?? 1024);
     },
   };
-}
-
-// ---- Model benchmark ----
-
-export async function benchmarkVlmModels(
-  imageBase64: string,
-  prompt: string,
-  tiers: VlmModel["tier"][] = ["free", "cheap", "mid"],
-  apiKey?: string,
-): Promise<VlmBenchResult[]> {
-  const key = apiKey ?? process.env.OPENROUTER_API_KEY;
-  if (!key) return [];
-
-  const results: VlmBenchResult[] = [];
-
-  for (const tier of tiers) {
-    const models = VLM_MODELS.filter((m) => m.tier === tier);
-    for (const model of models) {
-      try {
-        const client = createVlmClient(model.id, key);
-        if (!client) continue;
-        const resp = await client.analyzeImage(imageBase64, prompt, { maxTokens: 512 });
-        results.push({
-          model: model.id,
-          tier: model.tier,
-          costUsd: resp.costUsd,
-          latencyMs: resp.latencyMs,
-          responseLength: resp.content.length,
-        });
-      } catch (e) {
-        results.push({
-          model: model.id,
-          tier: model.tier,
-          costUsd: -1,
-          latencyMs: -1,
-          responseLength: 0,
-        });
-      }
-    }
-  }
-
-  return results;
 }
