@@ -683,3 +683,23 @@ Stage 2 (LLM, 高精度): 構造化 diff + CSS source + CSS text diff → FIX: s
 | Crater + llama-4-scout | $0.09 | $0 | **$0.09** |
 | Crater + free モデル | $0 | $0 | **$0** |
 | Chromium + llama-4-scout | $0.09 | $168 | $168 |
+
+### レンダリングコスト比較 (10,000 ページ/日, 80,500 renders)
+
+| | Chromium | Crater pixel | Crater paint tree | Crater batch |
+|---|---|---|---|---|
+| 速度/VP | 600ms | 50ms | 18ms | 10ms |
+| CPU/日 | 13.5h | 1.1h | 0.4h | 0.2h |
+| Speedup | 1x | 12x | 33x | 60x |
+
+### インフラ別 合計月額 (AI $0.10 + Compute)
+
+| 構成 | 月額 |
+|------|------|
+| Self-hosted + Crater | **$0.10** |
+| Fly.io + Crater paint tree | **$0.14** |
+| Fly.io + Crater pixel | $0.21 |
+| CF Workers + Crater WASM | $1 |
+| GH Actions + Crater paint tree | $6 |
+| GH Actions + Crater pixel | $16 |
+| GH Actions + Chromium | $193 |
