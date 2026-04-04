@@ -278,42 +278,72 @@ function buildDiffContent(options: {
 
 // ---- Factory ----
 
+export type LLMProviderName = "gemini" | "anthropic" | "openrouter";
+
 /**
- * 統合 LLM クライアントを作成。利用可能なプロバイダを自動検出。
+ * 環境変数からプロバイダとキーを解決する。
+ *
+ * VRT_LLM_PROVIDER: gemini (default) | anthropic | openrouter
+ * VRT_LLM_MODEL: モデル ID (省略時はプロバイダのデフォルト)
  */
-export function createUnifiedLLMClient(options?: LLMClientOptions): UnifiedLLMClient | null {
-  // 指定プロバイダ
-  if (options?.provider === "anthropic") {
-    const key = process.env.ANTHROPIC_API_KEY;
-    return key ? createAnthropicClient(key, options.model) : null;
-  }
-  if (options?.provider === "gemini") {
-    const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_AI_API_KEY;
-    return key ? createGeminiLLMClient(key, options.model) : null;
-  }
-  if (options?.provider === "openrouter") {
-    const key = process.env.OPENROUTER_API_KEY;
-    return key ? createOpenRouterLLMClient(key, options.model) : null;
-  }
+function resolveProviderConfig(options?: LLMClientOptions): {
+  provider: LLMProviderName;
+  key: string;
+  model?: string;
+} | null {
+  const provider = (options?.provider
+    ?? process.env.VRT_LLM_PROVIDER
+    ?? "gemini") as LLMProviderName;
 
-  // 自動検出 (優先順)
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  if (anthropicKey) return createAnthropicClient(anthropicKey, options?.model);
+  const model = options?.model ?? process.env.VRT_LLM_MODEL ?? undefined;
 
-  const geminiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_AI_API_KEY;
-  if (geminiKey) return createGeminiLLMClient(geminiKey, options?.model);
+  const keyMap: Record<LLMProviderName, string | undefined> = {
+    gemini: process.env.GEMINI_API_KEY ?? process.env.GOOGLE_AI_API_KEY,
+    anthropic: process.env.ANTHROPIC_API_KEY,
+    openrouter: process.env.OPENROUTER_API_KEY,
+  };
 
-  const openrouterKey = process.env.OPENROUTER_API_KEY;
-  if (openrouterKey) return createOpenRouterLLMClient(openrouterKey, options?.model);
+  const key = keyMap[provider];
+  if (!key) return null;
 
-  return null;
+  return { provider, key, model };
 }
 
 /**
- * 後方互換: 既存の LLMProvider インターフェースを返す
+ * 統合 LLM クライアントを作成。
+ *
+ * プロバイダは VRT_LLM_PROVIDER 環境変数で指定 (デフォルト: gemini)。
+ */
+export function createUnifiedLLMClient(options?: LLMClientOptions): UnifiedLLMClient | null {
+  const config = resolveProviderConfig(options);
+  if (!config) return null;
+
+  switch (config.provider) {
+    case "anthropic":
+      return createAnthropicClient(config.key, config.model);
+    case "gemini":
+      return createGeminiLLMClient(config.key, config.model);
+    case "openrouter":
+      return createOpenRouterLLMClient(config.key, config.model);
+  }
+}
+
+/**
+ * 後方互換: 既存の LLMProvider インターフェースを返す。
+ * VRT_LLM_PROVIDER で指定されたプロバイダを使う。
+ * キーがない場合は他のプロバイダにフォールバック。
  */
 export function createLLMProvider(): LLMProvider | null {
+  // まず設定通りに試みる
   const client = createUnifiedLLMClient();
-  if (!client) return null;
-  return { complete: (prompt: string) => client.complete(prompt) };
+  if (client) return { complete: (prompt: string) => client.complete(prompt) };
+
+  // フォールバック: 利用可能なキーがあれば使う
+  const fallbackOrder: LLMProviderName[] = ["gemini", "anthropic", "openrouter"];
+  for (const provider of fallbackOrder) {
+    const fb = createUnifiedLLMClient({ provider });
+    if (fb) return { complete: (prompt: string) => fb.complete(prompt) };
+  }
+
+  return null;
 }
