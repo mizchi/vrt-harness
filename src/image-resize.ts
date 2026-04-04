@@ -9,11 +9,31 @@ import { PNG } from "pngjs";
 export type ResolutionPreset = "low" | "medium" | "high" | "full";
 
 export const RESOLUTION_PRESETS: Record<ResolutionPreset, { maxWidth: number; maxHeight: number }> = {
-  low: { maxWidth: 200, maxHeight: 150 },     // ~94 tokens, $0.03e-7/call
-  medium: { maxWidth: 400, maxHeight: 300 },   // ~132 tokens, $0.06e-7/call
-  high: { maxWidth: 800, maxHeight: 600 },     // ~499 tokens, $0.09e-7/call
-  full: { maxWidth: 4096, maxHeight: 4096 },   // original size
+  low: { maxWidth: 375, maxHeight: 320 },      // mobile viewport 幅を維持。~130 tokens
+  medium: { maxWidth: 640, maxHeight: 480 },    // breakpoint 境界を維持。~200 tokens
+  high: { maxWidth: 1280, maxHeight: 900 },     // desktop viewport そのまま。~500 tokens
+  full: { maxWidth: 4096, maxHeight: 4096 },    // original size
 };
+
+/**
+ * viewport サイズから最適な解像度プリセットを選択。
+ * viewport 幅の半分以上の解像度を持つ最小のプリセットを返す。
+ */
+export function resolveResolutionForViewport(
+  viewportWidth: number,
+  maxPreset: ResolutionPreset = "high",
+): ResolutionPreset {
+  const order: ResolutionPreset[] = ["low", "medium", "high", "full"];
+  const maxIdx = order.indexOf(maxPreset);
+
+  for (let i = 0; i <= maxIdx; i++) {
+    const preset = RESOLUTION_PRESETS[order[i]];
+    // 画像幅が viewport の半分以上あれば十分
+    if (preset.maxWidth >= viewportWidth / 2) return order[i];
+  }
+
+  return maxPreset;
+}
 
 export interface ResizeOptions {
   /** プリセット or カスタムサイズ */
