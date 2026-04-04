@@ -84,24 +84,27 @@ export interface ReasoningPipeline {
 
 // ---- Stage 1 prompt ----
 
-const STAGE1_PROMPT = `You are analyzing a VRT (Visual Regression Testing) diff. Identify each visual change between the baseline and current screenshots.
+const STAGE1_PROMPT = `You are analyzing a VRT (Visual Regression Testing) diff image. The red/pink areas in the heatmap show WHERE pixels differ, NOT the actual colors of the elements.
 
-For each change, output ONE line in this EXACT format:
+IMPORTANT: Red in the heatmap means "this area changed" — it does NOT mean the element is red. You must infer the actual CSS values from the element context, not from the heatmap color.
+
+For each visual change, output ONE line in this EXACT format:
 CHANGE: [element] | [css-property] | [before-value] | [after-value] | [severity:low/medium/high]
 
 Example:
 CHANGE: h1 heading | color | #333333 | #111111 | low
 CHANGE: .card | padding | 16px | 12px | medium
 CHANGE: .card | background-color | #f0f0f0 | #eff6ff | medium
-CHANGE: .card | border-radius | 8px | 12px | low
-CHANGE: table header | font-size | 14px | 13px | medium
 CHANGE: table header | text-transform | none | uppercase | high
+
+Rules:
+- Do NOT repeat the same element+property combination.
+- Do NOT confuse heatmap red with actual CSS colors.
+- Use approximate CSS values based on visual appearance.
 
 After all changes, add:
 SUMMARY: <one sentence describing the overall change>
-REGRESSION: <yes/no>
-
-Be precise. Only list actual visual differences you can see.`;
+REGRESSION: <yes/no>`;
 
 // ---- Stage 2 prompt ----
 
@@ -141,6 +144,7 @@ Only suggest fixes for actual differences. Be precise with CSS values.`;
 
 function parseStage1Response(raw: string): { changes: VisualChange[]; summary: string; regression: boolean } {
   const changes: VisualChange[] = [];
+  const seen = new Set<string>();
   let summary = "";
   let regression = false;
 
@@ -149,6 +153,9 @@ function parseStage1Response(raw: string): { changes: VisualChange[]; summary: s
 
     const changeMatch = trimmed.match(/^CHANGE:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(low|medium|high)/i);
     if (changeMatch) {
+      const key = `${changeMatch[1].trim()}|${changeMatch[2].trim()}`;
+      if (seen.has(key)) continue; // deduplicate
+      seen.add(key);
       changes.push({
         element: changeMatch[1].trim(),
         property: changeMatch[2].trim(),
